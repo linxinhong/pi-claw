@@ -17,7 +17,8 @@
 		"voice": { "enabled": true, "defaultVoice": "Cherry" },
 		"memory": { "enabled": true, "maxHistoryMessages": 10 },
 		"card": { "enabled": true },
-		"event": { "enabled": false }
+		"event": { "enabled": false },
+		"debug": { "enabled": true }
 	},
 	"feishu": {
 		"appId": "${FEISHU_APP_ID}",

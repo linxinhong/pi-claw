@@ -54,16 +54,10 @@ export class FeishuPlatformContext implements PlatformContext {
 	}
 
 	async sendText(chatId: string, text: string): Promise<string> {
-		// 如果是工具状态消息（以 "_ ->" 开头），更新状态卡片
+		// 如果是工具状态消息（以 "_ ->" 开头），记录到历史
 		if (text.startsWith("_ -> ") || text.startsWith("_Error:")) {
 			const cleanText = text.replace(/^_/, "").replace(/_$/, "");
 			this.toolHistory.push(cleanText);
-
-			const historyText = this.toolHistory.join("\n");
-			if (this.statusMessageId) {
-				await this.config.updateMessage(this.statusMessageId, `🤔 处理中...\n\n${historyText}`);
-				return this.statusMessageId;
-			}
 		}
 
 		// 如果还没有状态消息，先创建一个
@@ -71,7 +65,7 @@ export class FeishuPlatformContext implements PlatformContext {
 			this.statusMessageId = await this.config.postMessage(chatId, "🤔 处理中...");
 		}
 
-		// 更新状态卡片
+		// 更新状态卡片（只更新一次）
 		if (this.toolHistory.length > 0) {
 			const historyText = this.toolHistory.join("\n");
 			await this.config.updateMessage(this.statusMessageId, `🤔 处理中...\n\n${historyText}`);

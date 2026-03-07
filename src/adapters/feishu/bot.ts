@@ -14,6 +14,7 @@ import type { SandboxConfig } from "../../core/sandbox/index.js";
 // 内置插件
 import { voicePlugin } from "../../plugins/voice/index.js";
 import { cardPlugin } from "./card/index.js";
+import { debugPlugin } from "../../plugins/debug/index.js";
 
 // ============================================================================
 // Types
@@ -37,7 +38,7 @@ export interface FeishuBotOptions {
  * 获取飞书平台内置插件
  */
 export function getFeishuBuiltinPlugins() {
-	return [voicePlugin, cardPlugin];
+	return [voicePlugin, cardPlugin, debugPlugin];
 }
 
 // ============================================================================
