@@ -63,9 +63,14 @@ const FILES: FileConfig[] = [
 	// 配置文件
 	{
 		path: "config.json",
-		template: "config.json",
+		template: "config.example.json",
 		permissions: 0o600,
 		replaceVars: true,
+	},
+	{
+		path: "models.json",
+		template: "models.example.json",
+		permissions: 0o600,
 	},
 	{
 		path: "SYSTEM.md",
@@ -272,8 +277,8 @@ export function registerInitCommand(program: Command): void {
    1. Edit configuration:
       ${join(WORKSPACE, "config.json")}
 
-   2. (Optional) Copy and edit models config:
-      cp templates/models.example.json models.json
+   2. Edit models config:
+      ${join(WORKSPACE, "models.json")}
 
    3. Edit your profile:
       ${join(WORKSPACE, "boot/profile.md")}
