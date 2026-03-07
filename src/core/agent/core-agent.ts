@@ -295,6 +295,7 @@ export class CoreAgent {
 					const content = agentEvent.message.content;
 					const textParts = content.filter((c: any) => c.type === "text").map((c: any) => c.text);
 					finalResponse = textParts.join("\n");
+					resolve(finalResponse);
 				}
 			});
 		});
