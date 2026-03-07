@@ -38,7 +38,7 @@ test-temp/
 *.tsbuildinfo
 
 # Local data
-memory/
+/memory/
 
 # Temporary files
 *.tmp
