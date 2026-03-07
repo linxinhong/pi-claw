@@ -9,85 +9,23 @@ import { Type, Static } from "@sinclair/typebox";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import type { Plugin, PluginContext, PluginInitContext } from "../../../core/plugin/types.js";
 import * as log from "../../../utils/logger/index.js";
+import {
+	buildCard,
+	buildDiv,
+	buildDivider,
+	buildTextCard,
+	buildErrorCard,
+	autoBuildCard,
+	type CardElement,
+	type FeishuCardContent,
+} from "../cards/index.js";
 
 // ============================================================================
 // Types
 // ============================================================================
 
-interface CardElement {
-	tag: string;
-	text?: { tag: string; content: string };
-	actions?: CardAction[];
-	[key: string]: any;
-}
-
-interface CardAction {
-	tag: string;
-	text?: { tag: string; content: string };
-	url?: string;
-	[key: string]: any;
-}
-
-interface CardContent {
-	schema: string;
-	config: { width_mode: string; update_multi: boolean };
-	body: { elements: CardElement[] };
-}
-
-// ============================================================================
-// Card Builder
-// ============================================================================
-
-class CardBuilder {
-	private elements: CardElement[] = [];
-
-	addMarkdown(content: string): this {
-		this.elements.push({
-			tag: "div",
-			text: { tag: "lark_md", content },
-		});
-		return this;
-	}
-
-	addDivider(): this {
-		this.elements.push({ tag: "hr" });
-		return this;
-	}
-
-	addTitle(content: string): this {
-		this.elements.push({
-			tag: "div",
-			text: { tag: "plain_text", content },
-		});
-		return this;
-	}
-
-	addAction(actions: CardAction[]): this {
-		this.elements.push({
-			tag: "action",
-			actions,
-		});
-		return this;
-	}
-
-	addButton(text: string, url: string): this {
-		return this.addAction([
-			{
-				tag: "button",
-				text: { tag: "plain_text", content: text },
-				url,
-			},
-		]);
-	}
-
-	build(): CardContent {
-		return {
-			schema: "2.0",
-			config: { width_mode: "fill", update_multi: true },
-			body: { elements: this.elements },
-		};
-	}
-}
+// 重新导出类型以保持向后兼容
+export type { CardElement, FeishuCardContent as CardContent } from "../cards/index.js";
 
 // ============================================================================
 // Tools
@@ -100,12 +38,6 @@ const CardSchema = Type.Object({
 type CardParams = Static<typeof CardSchema>;
 
 function createBuildCardTool(): AgentTool<typeof CardSchema> {
-	const CardSchema = Type.Object({
-		elements: Type.String({ description: "JSON array of card elements" }),
-		label: Type.String({ description: "Short label shown to user" }),
-	});
-	type CardParams = Static<typeof CardSchema>;
-
 	return {
 		name: "buildCard",
 		label: "Build Card",
@@ -115,21 +47,23 @@ function createBuildCardTool(): AgentTool<typeof CardSchema> {
 			const { elements } = params;
 			try {
 				const parsed = JSON.parse(elements);
-				const builder = new CardBuilder();
+				const cardElements: CardElement[] = [];
 
 				for (const el of parsed) {
 					if (el.type === "markdown") {
-						builder.addMarkdown(el.content);
+						cardElements.push(buildDiv(el.content));
 					} else if (el.type === "divider") {
-						builder.addDivider();
+						cardElements.push(buildDivider());
 					} else if (el.type === "title") {
-						builder.addTitle(el.content);
-					} else if (el.type === "button") {
-						builder.addButton(el.text, el.url);
+						cardElements.push(buildDiv(`**${el.content}**`));
+					} else if (el.type === "button" && el.text && el.url) {
+						// 按钮需要单独处理
+						cardElements.push(buildDiv(`[${el.text}](${el.url})`));
 					}
 				}
 
-				const result = JSON.stringify(builder.build(), null, 2);
+				const card = buildCard(cardElements);
+				const result = JSON.stringify(card, null, 2);
 				return {
 					content: [{ type: "text", text: result }],
 					details: { elementCount: parsed.length },
@@ -158,7 +92,7 @@ export const cardPlugin: Plugin = {
 	meta: {
 		id: "card",
 		name: "Card",
-		version: "2.0.0",
+		version: "3.0.0",
 		description: "Feishu card message builder (platform-specific)",
 		// 仅支持飞书平台
 		supportedPlatforms: ["feishu"],
@@ -173,4 +107,32 @@ export const cardPlugin: Plugin = {
 	},
 };
 
-export { CardBuilder, type CardContent, type CardElement };
+// ============================================================================
+// 便捷导出（向后兼容）
+// ============================================================================
+
+/**
+ * @deprecated 使用 buildTextCard 或 buildCard 代替
+ * 保留此导出以保持向后兼容
+ */
+export function createTextCard(content: string): FeishuCardContent {
+	return buildTextCard(content);
+}
+
+/**
+ * @deprecated 使用 autoBuildCard 代替
+ * 保留此导出以保持向后兼容
+ */
+export function createSmartCard(content: string): FeishuCardContent {
+	return autoBuildCard(content);
+}
+
+// 重新导出卡片构建函数
+export {
+	buildCard,
+	buildTextCard,
+	buildErrorCard,
+	autoBuildCard,
+	buildDiv,
+	buildDivider,
+} from "../cards/index.js";

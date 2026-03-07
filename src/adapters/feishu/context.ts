@@ -5,6 +5,7 @@
  */
 
 import type { PlatformContext } from "../../core/platform/context.js";
+import { buildStatusCard, autoBuildCard, buildProgressCard, buildTextCard } from "./cards/index.js";
 
 // ============================================================================
 // Types
@@ -62,13 +63,14 @@ export class FeishuPlatformContext implements PlatformContext {
 
 		// 如果还没有状态消息，先创建一个
 		if (!this.statusMessageId) {
-			this.statusMessageId = await this.config.postMessage(chatId, "🤔 处理中...");
+			const initialCard = JSON.stringify(buildProgressCard("🤔 处理中...", []));
+			this.statusMessageId = await this.config.postMessage(chatId, initialCard);
 		}
 
-		// 更新状态卡片（只更新一次）
+		// 更新状态卡片
 		if (this.toolHistory.length > 0) {
-			const historyText = this.toolHistory.join("\n");
-			await this.config.updateMessage(this.statusMessageId, `🤔 处理中...\n\n${historyText}`);
+			const progressCard = JSON.stringify(buildProgressCard("🤔 处理中...", this.toolHistory));
+			await this.config.updateMessage(this.statusMessageId, progressCard);
 		}
 
 		return this.statusMessageId;
@@ -116,12 +118,16 @@ export class FeishuPlatformContext implements PlatformContext {
 	 */
 	async finishStatus(finalMessage?: string): Promise<void> {
 		if (finalMessage) {
+			// 使用智能卡片构建器
+			const card = autoBuildCard(finalMessage);
+			const cardContent = JSON.stringify(card);
+
 			if (this.statusMessageId) {
 				// 有状态消息，更新它
-				await this.config.updateMessage(this.statusMessageId, finalMessage);
+				await this.config.updateMessage(this.statusMessageId, cardContent);
 			} else {
 				// 没有状态消息（没有工具调用），创建新消息
-				this.statusMessageId = await this.config.postMessage(this.config.chatId, finalMessage);
+				this.statusMessageId = await this.config.postMessage(this.config.chatId, cardContent);
 			}
 		} else if (this.statusMessageId) {
 			// 没有最终消息，删除状态消息
@@ -138,15 +144,12 @@ export class FeishuPlatformContext implements PlatformContext {
 		switch (feature) {
 			case "buildCard": {
 				// 返回飞书卡片构建函数
-				const fn = (content: string) => {
-					return JSON.stringify({
-						schema: "2.0",
-						config: { width_mode: "fill", update_multi: true },
-						body: {
-							elements: [{ tag: "div", text: { tag: "lark_md", content } }],
-						},
-					});
-				};
+				const fn = (content: string) => JSON.stringify(buildTextCard(content));
+				return fn as T;
+			}
+			case "autoBuildCard": {
+				// 返回智能卡片构建函数
+				const fn = (content: string) => JSON.stringify(autoBuildCard(content));
 				return fn as T;
 			}
 			default:

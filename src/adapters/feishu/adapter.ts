@@ -22,6 +22,7 @@ import { parseFeishuMessage } from "./message-parser.js";
 import type { Logger } from "../../utils/logger/index.js";
 import { PiLogger } from "../../utils/logger/index.js";
 import { getHookManager, HOOK_NAMES } from "../../core/hook/index.js";
+import { buildTextCard } from "./cards/index.js";
 
 // ============================================================================
 // Types
@@ -302,13 +303,7 @@ export class FeishuAdapter implements PlatformAdapter {
 	// ========================================================================
 
 	private buildTextCard(text: string): string {
-		return JSON.stringify({
-			schema: "2.0",
-			config: { width_mode: "fill", update_multi: true },
-			body: {
-				elements: [{ tag: "div", text: { tag: "lark_md", content: text } }],
-			},
-		});
+		return JSON.stringify(buildTextCard(text));
 	}
 
 	private async postMessage(channel: string, text: string): Promise<string> {

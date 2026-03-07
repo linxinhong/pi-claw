@@ -5,6 +5,7 @@
  */
 
 import type { PlatformCapabilities, CAPABILITIES } from "../../core/plugin/types.js";
+import { buildTextCard, autoBuildCard } from "./cards/index.js";
 
 // ============================================================================
 // Types
@@ -99,15 +100,13 @@ export class FeishuCapabilities implements PlatformCapabilities {
 		switch (feature) {
 			case "buildCard": {
 				// 返回飞书卡片构建函数
-				const fn = (content: string) => {
-					return JSON.stringify({
-						schema: "2.0",
-						config: { width_mode: "fill", update_multi: true },
-						body: {
-							elements: [{ tag: "div", text: { tag: "lark_md", content } }],
-						},
-					});
-				};
+				const fn = (content: string) => JSON.stringify(buildTextCard(content));
+				return fn as T;
+			}
+
+			case "autoBuildCard": {
+				// 返回智能卡片构建函数
+				const fn = (content: string) => JSON.stringify(autoBuildCard(content));
 				return fn as T;
 			}
 
