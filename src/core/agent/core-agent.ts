@@ -348,10 +348,38 @@ export class CoreAgent {
 		platformContext: PlatformContext,
 		additionalContext: Partial<AgentContext>,
 	): Promise<void> {
+		const hookManager = this.config.hookManager;
+
+		// 触发 AGENT_INIT_START hook
+		if (hookManager?.hasHooks(HOOK_NAMES.AGENT_INIT_START)) {
+			await hookManager.emit(HOOK_NAMES.AGENT_INIT_START, {
+				channelId: chatId,
+				timestamp: new Date(),
+			});
+		}
+
 		const workspacePath = this.config.executor.getWorkspacePath(
 			join(channelDir, "..", ".."),
 		);
+
+		// 触发 MODEL_GET_START hook
+		if (hookManager?.hasHooks(HOOK_NAMES.MODEL_GET_START)) {
+			await hookManager.emit(HOOK_NAMES.MODEL_GET_START, {
+				channelId: chatId,
+				timestamp: new Date(),
+			});
+		}
+
 		const model = await this.config.modelManager.getModelInstance(chatId, this.config.adapterDefaultModel);
+
+		// 触发 MODEL_GET_END hook
+		if (hookManager?.hasHooks(HOOK_NAMES.MODEL_GET_END)) {
+			await hookManager.emit(HOOK_NAMES.MODEL_GET_END, {
+				channelId: chatId,
+				modelId: model.id,
+				timestamp: new Date(),
+			});
+		}
 
 		// 创建或获取 MemoryStore
 		if (!state.memoryStore) {
@@ -428,7 +456,6 @@ export class CoreAgent {
 		const systemPrompt = buildSystemPrompt(context, skills, memoryContent);
 
 		// 触发 SYSTEM_PROMPT_BUILD hook
-		const hookManager = this.config.hookManager;
 		if (hookManager?.hasHooks(HOOK_NAMES.SYSTEM_PROMPT_BUILD)) {
 			await hookManager.emit(HOOK_NAMES.SYSTEM_PROMPT_BUILD, {
 				channelId: chatId,
@@ -464,6 +491,14 @@ export class CoreAgent {
 		}
 
 		log.logInfo(`[Agent] Initialized for channel ${chatId} with model ${model.id}`);
+
+		// 触发 AGENT_INIT_END hook
+		if (hookManager?.hasHooks(HOOK_NAMES.AGENT_INIT_END)) {
+			await hookManager.emit(HOOK_NAMES.AGENT_INIT_END, {
+				channelId: chatId,
+				timestamp: new Date(),
+			});
+		}
 	}
 
 	/**

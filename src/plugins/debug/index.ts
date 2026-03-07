@@ -19,6 +19,10 @@ import type {
 	ToolCallContext,
 	ToolCalledContext,
 	SystemPromptBuildContext,
+	AgentInitStartContext,
+	AgentInitEndContext,
+	ModelGetStartContext,
+	ModelGetEndContext,
 } from "../../core/hook/types.js";
 import { getHookManager, HOOK_NAMES } from "../../core/hook/index.js";
 
@@ -219,6 +223,32 @@ class DebugPluginImpl implements Plugin {
 			const result = await next();
 			this.log(`[SYSTEM_PROMPT_BUILD_DONE] channelId=${ctx.channelId} duration=${Date.now() - start}ms`);
 			return result;
+		});
+
+		// ========== Agent 内部诊断 Hook ==========
+
+		// agent:init-start
+		hookManager.on<AgentInitStartContext>(HOOK_NAMES.AGENT_INIT_START, async (ctx, next) => {
+			this.log(`[AGENT_INIT_START] channelId=${ctx.channelId}`);
+			return next();
+		});
+
+		// agent:init-end
+		hookManager.on<AgentInitEndContext>(HOOK_NAMES.AGENT_INIT_END, async (ctx, next) => {
+			this.log(`[AGENT_INIT_END] channelId=${ctx.channelId}`);
+			return next();
+		});
+
+		// model:get-start
+		hookManager.on<ModelGetStartContext>(HOOK_NAMES.MODEL_GET_START, async (ctx, next) => {
+			this.log(`[MODEL_GET_START] channelId=${ctx.channelId}`);
+			return next();
+		});
+
+		// model:get-end
+		hookManager.on<ModelGetEndContext>(HOOK_NAMES.MODEL_GET_END, async (ctx, next) => {
+			this.log(`[MODEL_GET_END] channelId=${ctx.channelId} modelId=${ctx.modelId}`);
+			return next();
 		});
 
 		context.log("info", "[Debug Plugin] Initialized, logging to logs/debug.log");

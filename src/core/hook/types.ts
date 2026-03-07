@@ -127,6 +127,12 @@ export const HOOK_NAMES = {
 	SESSION_CREATE: "session:create",
 	SESSION_DESTROY: "session:destroy",
 
+	// Agent 内部诊断
+	AGENT_INIT_START: "agent:init-start",
+	AGENT_INIT_END: "agent:init-end",
+	MODEL_GET_START: "model:get-start",
+	MODEL_GET_END: "model:get-end",
+
 	// Events 事件调度
 	EVENT_TRIGGER: "event:trigger",
 	EVENT_TRIGGERED: "event:triggered",
@@ -251,6 +257,39 @@ export interface SystemPromptBuildContext {
 	timestamp: Date;
 }
 
+/**
+ * Agent 初始化开始上下文
+ */
+export interface AgentInitStartContext {
+	channelId: string;
+	timestamp: Date;
+}
+
+/**
+ * Agent 初始化完成上下文
+ */
+export interface AgentInitEndContext {
+	channelId: string;
+	timestamp: Date;
+}
+
+/**
+ * 模型获取开始上下文
+ */
+export interface ModelGetStartContext {
+	channelId: string;
+	timestamp: Date;
+}
+
+/**
+ * 模型获取完成上下文
+ */
+export interface ModelGetEndContext {
+	channelId: string;
+	modelId: string;
+	timestamp: Date;
+}
+
 // ============================================================================
 // Type Map
 // ============================================================================
@@ -276,4 +315,8 @@ export interface HookContextMap {
 	[HOOK_NAMES.TOOL_CALL]: ToolCallContext;
 	[HOOK_NAMES.TOOL_CALLED]: ToolCalledContext;
 	[HOOK_NAMES.SYSTEM_PROMPT_BUILD]: SystemPromptBuildContext;
+	[HOOK_NAMES.AGENT_INIT_START]: AgentInitStartContext;
+	[HOOK_NAMES.AGENT_INIT_END]: AgentInitEndContext;
+	[HOOK_NAMES.MODEL_GET_START]: ModelGetStartContext;
+	[HOOK_NAMES.MODEL_GET_END]: ModelGetEndContext;
 }
