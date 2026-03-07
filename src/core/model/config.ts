@@ -5,72 +5,80 @@
  */
 
 import { existsSync, readFileSync } from "fs";
-import { join } from "path";
-import type { ModelConfig, ModelsConfig } from "./types.js";
+import type { ModelsConfig, ProviderConfig } from "./types.js";
 
 // ============================================================================
-// Constants
+// Environment Variable Resolution
 // ============================================================================
 
-const DEFAULT_MODELS: ModelsConfig = {
-	default: "qwen",
-	models: {
-		qwen: {
-			id: "qwen",
-			name: "通义千问",
-			provider: "dashscope",
-			baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-			apiKeyEnv: "DASHSCOPE_API_KEY",
-			model: "qwen-plus",
-			capabilities: {
-				vision: true,
-				tools: true,
-				streaming: true,
-			},
-			defaultParams: {
-				temperature: 0.7,
-				maxTokens: 4000,
-			},
-		},
-		glm: {
-			id: "glm",
-			name: "智谱 GLM",
-			provider: "zhipu",
-			baseUrl: "https://open.bigmodel.cn/api/paas/v4",
-			apiKeyEnv: "ZHIPU_API_KEY",
-			model: "glm-4",
-			capabilities: {
-				vision: true,
-				tools: true,
-				streaming: true,
-			},
-			defaultParams: {
-				temperature: 0.7,
-				maxTokens: 4000,
-			},
-		},
-		kimi: {
-			id: "kimi",
-			name: "Moonshot Kimi",
-			provider: "moonshot",
-			baseUrl: "https://api.moonshot.cn/v1",
-			apiKeyEnv: "MOONSHOT_API_KEY",
-			model: "moonshot-v1-8k",
-			capabilities: {
-				vision: false,
-				tools: true,
-				streaming: true,
-			},
-			defaultParams: {
-				temperature: 0.7,
-				maxTokens: 4000,
-			},
-		},
-	},
-};
+/**
+ * 解析 API Key，支持环境变量引用
+ * 格式: "$ENV_VAR_NAME" -> 从环境变量加载
+ *       "sk-xxx" -> 直接使用
+ * @param apiKey API Key 字符串
+ * @returns 解析后的 API Key
+ */
+function resolveApiKey(apiKey: string | undefined): string | undefined {
+	if (!apiKey) return undefined;
+
+	// 检查是否是环境变量引用格式
+	if (apiKey.startsWith("$")) {
+		const envVarName = apiKey.substring(1);
+		const envValue = process.env[envVarName];
+		if (!envValue) {
+			console.warn(`[ModelConfig] Environment variable not found: ${envVarName}`);
+		}
+		return envValue;
+	}
+
+	return apiKey;
+}
+
+/**
+ * 解析 provider 配置中的环境变量
+ * @param providerConfig 提供商配置
+ * @returns 解析后的配置
+ */
+function resolveProviderConfig(providerConfig: ProviderConfig): ProviderConfig {
+	const resolved: ProviderConfig = {
+		...providerConfig,
+		apiKey: resolveApiKey(providerConfig.apiKey),
+	};
+
+	// 解析 headers 中的环境变量
+	if (providerConfig.headers) {
+		resolved.headers = Object.fromEntries(
+			Object.entries(providerConfig.headers).map(([k, v]) => [
+				k,
+				typeof v === "string" && v.startsWith("$")
+					? process.env[v.substring(1)] || v
+					: v,
+			])
+		);
+	}
+
+	return resolved;
+}
+
+/**
+ * 解析配置中的所有环境变量
+ * @param config 原始配置
+ * @returns 解析后的配置
+ */
+function resolveConfigEnvVars(config: ModelsConfig): ModelsConfig {
+	const resolved: ModelsConfig = {
+		providers: {},
+	};
+
+	for (const [providerName, providerConfig] of Object.entries(config.providers)) {
+		resolved.providers[providerName] = resolveProviderConfig(providerConfig);
+	}
+
+	return resolved;
+}
 
 // ============================================================================
-// Model Config Loader
+// Config Loader
 // ============================================================================
 
 /**
@@ -78,78 +86,22 @@ const DEFAULT_MODELS: ModelsConfig = {
  * @param configPath 配置文件路径
  * @returns 模型配置
  */
-export function loadModelConfig(configPath: string): ModelsConfig {
+export function loadModelsConfig(configPath: string): ModelsConfig {
 	if (!existsSync(configPath)) {
-		return DEFAULT_MODELS;
+		throw new Error(`Models config not found: ${configPath}`);
 	}
 
-	try {
-		const content = readFileSync(configPath, "utf-8");
-		const config = JSON.parse(content) as ModelsConfig;
+	const content = readFileSync(configPath, "utf-8");
+	const rawConfig = JSON.parse(content) as ModelsConfig;
 
-		// 验证配置格式
-		if (!config.models || Object.keys(config.models).length === 0) {
-			console.warn(`[ModelConfig] Invalid models config in ${configPath}, using defaults`);
-			return DEFAULT_MODELS;
-		}
-
-		return config;
-	} catch (error) {
-		console.warn(`[ModelConfig] Failed to load ${configPath}:`, error);
-		return DEFAULT_MODELS;
-	}
-}
-
-/**
- * 获取模型 API Key
- * @param config 模型配置
- * @returns API Key
- */
-export function getModelApiKey(config: ModelConfig): string {
-	// 优先使用配置中的 apiKey
-	if (config.apiKey) {
-		return config.apiKey;
+	// 验证 providers 存在
+	if (!rawConfig.providers || Object.keys(rawConfig.providers).length === 0) {
+		throw new Error("Invalid config: 'providers' must be a non-empty object");
 	}
 
-	// 从环境变量读取
-	if (config.apiKeyEnv) {
-		const apiKey = process.env[config.apiKeyEnv];
-		if (apiKey) {
-			return apiKey;
-		}
-	}
+	// 解析环境变量
+	const resolved = resolveConfigEnvVars(rawConfig);
+	console.log(`[ModelConfig] Loaded config with ${Object.keys(resolved.providers).length} providers`);
 
-	throw new Error(`No API key found for model ${config.id}. Set ${config.apiKeyEnv} environment variable or provide apiKey in config.`);
-}
-
-/**
- * 解析模型规范
- * @param modelSpec 模型规范（如 "qwen", "dashscope/qwen-plus"）
- * @param config 模型配置
- * @returns 模型配置
- */
-export function resolveModelSpec(modelSpec: string, config: ModelsConfig): ModelConfig {
-	const slashIndex = modelSpec.indexOf("/");
-
-	if (slashIndex !== -1) {
-		const provider = modelSpec.substring(0, slashIndex);
-		const modelId = modelSpec.substring(slashIndex + 1);
-
-		// 查找匹配的模型
-		for (const model of Object.values(config.models)) {
-			if (model.provider === provider && model.model === modelId) {
-				return model;
-			}
-		}
-	}
-
-	// 直接查找模型 ID
-	const model = config.models[modelSpec];
-	if (model) {
-		return model;
-	}
-
-	// 未找到，返回默认模型
-	console.warn(`[ModelConfig] Model not found: ${modelSpec}, using default: ${config.default}`);
-	return config.models[config.default];
+	return resolved;
 }

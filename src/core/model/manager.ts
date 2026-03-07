@@ -7,10 +7,43 @@
 import type { Api, Model } from "@mariozechner/pi-ai";
 import { join } from "path";
 import { AGENT_DIR } from "../../utils/config.js";
-import { loadModelConfig, getModelApiKey } from "./config.js";
-import type { ModelConfig, ModelsConfig } from "./types.js";
+import { loadModelsConfig } from "./config.js";
+import type { ModelsConfig, ModelDefinition, ProviderConfig } from "./types.js";
 import * as log from "../../utils/logger/index.js";
 import { ModelRegistry, AuthStorage } from "@mariozechner/pi-coding-agent";
+
+// ============================================================================
+// Legacy Type (for backward compatibility in return values)
+// ============================================================================
+
+/**
+ * 模型能力声明
+ */
+interface ModelCapabilities {
+	vision?: boolean;
+	tools?: boolean;
+	streaming?: boolean;
+}
+
+/**
+ * 模型配置（兼容旧格式返回值）
+ */
+export interface ModelConfig {
+	/** 模型标识 */
+	id: string;
+	/** 模型名称 */
+	name: string;
+	/** 提供商 */
+	provider: string;
+	/** API 基础 URL */
+	baseUrl?: string;
+	/** API Key */
+	apiKey?: string;
+	/** 模型 ID（用于 API 调用） */
+	model: string;
+	/** 能力声明 */
+	capabilities?: ModelCapabilities;
+}
 
 // ============================================================================
 // Model Manager
@@ -24,68 +57,44 @@ import { ModelRegistry, AuthStorage } from "@mariozechner/pi-coding-agent";
 export class ModelManager {
 	private config: ModelsConfig;
 	private currentModelId: string;
-	private perChannelModels: Map<string, string>; // 频道特定的模型选择
+	private currentProviderId: string;
+	private perChannelModels: Map<string, string>;
 	private modelRegistry: ModelRegistry;
 	private authStorage: AuthStorage;
 
 	constructor(configPath?: string) {
 		const path = configPath || join(AGENT_DIR, "models.json");
-		this.config = loadModelConfig(path);
-		this.currentModelId = this.config.default;
-		this.perChannelModels = new Map();
+		this.config = loadModelsConfig(path);
 
-		// 创建 AuthStorage 和 ModelRegistry
+		// 使用第一个 provider 的第一个 model 作为默认
+		const firstProvider = Object.keys(this.config.providers)[0];
+		this.currentProviderId = firstProvider;
+		this.currentModelId = this.config.providers[firstProvider]?.models[0]?.id || "";
+
+		this.perChannelModels = new Map();
 		this.authStorage = AuthStorage.create();
 		this.modelRegistry = new ModelRegistry(this.authStorage, path);
 
-		// 注册自定义提供商
-		this.registerCustomProviders();
+		this.registerProviders();
 	}
 
 	/**
-	 * 注册自定义提供商到 ModelRegistry
+	 * 注册所有提供商到 ModelRegistry
 	 */
-	private registerCustomProviders(): void {
-		// 收集所有需要注册的提供商
-		const providersToRegister = new Map<string, { baseUrl?: string; apiKey?: string; models: any[] }>();
-
-		for (const [modelId, modelConfig] of Object.entries(this.config.models)) {
-			const providerName = modelConfig.provider;
-
-			// 准备模型配置
-			const modelDef = {
-				id: modelConfig.model,
-				name: modelConfig.name,
-				api: "openai" as const, // 使用 OpenAI 兼容 API
-				reasoning: false,
-				input: ["text", "image"] as ("text" | "image")[],
-				cost: {
-					input: 0.001,
-					output: 0.002,
-					cacheRead: 0.0001,
-					cacheWrite: 0.0001,
-				},
-				contextWindow: 128000,
-				maxTokens: 4000,
-			};
-
-			if (!providersToRegister.has(providerName)) {
-				providersToRegister.set(providerName, {
-					baseUrl: modelConfig.baseUrl,
-					apiKey: modelConfig.apiKey || modelConfig.apiKeyEnv,
-					models: [modelDef],
-				});
-			} else {
-				const provider = providersToRegister.get(providerName)!;
-				provider.models.push(modelDef);
-			}
-		}
-
-		// 注册所有提供商
-		for (const [providerName, providerConfig] of providersToRegister) {
+	private registerProviders(): void {
+		for (const [providerName, providerConfig] of Object.entries(this.config.providers)) {
 			try {
-				this.modelRegistry.registerProvider(providerName, providerConfig);
-				log.logInfo(`[ModelManager] Registered provider: ${providerName}`);
+				const models = this.convertModels(providerConfig);
+
+				this.modelRegistry.registerProvider(providerName, {
+					baseUrl: providerConfig.baseUrl,
+					apiKey: providerConfig.apiKey,
+					api: (providerConfig.api || "openai") as "openai",
+					headers: providerConfig.headers,
+					models,
+				});
+
+				log.logInfo(`[ModelManager] Registered provider: ${providerName} with ${models.length} models`);
 			} catch (error) {
 				log.logWarning(`[ModelManager] Failed to register provider ${providerName}:`, error);
 			}
@@ -93,60 +102,166 @@ export class ModelManager {
 	}
 
 	/**
+	 * 转换模型配置为 ModelRegistry 格式
+	 */
+	private convertModels(providerConfig: ProviderConfig) {
+		return providerConfig.models.map((model) => ({
+			id: model.id,
+			name: model.name || model.id,
+			api: (model.api || providerConfig.api || "openai") as "openai",
+			reasoning: model.reasoning ?? false,
+			// 过滤掉 "audio" 类型，只保留 "text" 和 "image"
+			input: model.input.filter((t): t is "text" | "image" => t === "text" || t === "image"),
+			cost: {
+				input: model.cost.input,
+				output: model.cost.output,
+				cacheRead: model.cost.cacheRead ?? 0,
+				cacheWrite: model.cost.cacheWrite ?? 0,
+			},
+			contextWindow: model.contextWindow,
+			maxTokens: model.maxTokens,
+			compat: model.compat,
+		}));
+	}
+
+	/**
+	 * 将新格式模型转换为兼容的 ModelConfig
+	 */
+	private toModelConfig(model: ModelDefinition, providerName: string, providerConfig: ProviderConfig): ModelConfig {
+		return {
+			id: model.id,
+			name: model.name || model.id,
+			provider: providerName,
+			baseUrl: providerConfig.baseUrl,
+			apiKey: providerConfig.apiKey,
+			model: model.id,
+			capabilities: {
+				vision: model.input.includes("image"),
+				tools: true,
+				streaming: true,
+			},
+		};
+	}
+
+	/**
 	 * 获取所有模型配置
 	 */
 	getAllModels(): Record<string, ModelConfig> {
-		return this.config.models;
+		const result: Record<string, ModelConfig> = {};
+		for (const [providerName, providerConfig] of Object.entries(this.config.providers)) {
+			for (const model of providerConfig.models) {
+				result[model.id] = this.toModelConfig(model, providerName, providerConfig);
+			}
+		}
+		return result;
 	}
 
 	/**
 	 * 获取指定模型配置
 	 */
 	getModelConfig(modelId: string): ModelConfig | undefined {
-		return this.config.models[modelId];
+		for (const [providerName, providerConfig] of Object.entries(this.config.providers)) {
+			const model = providerConfig.models.find((m) => m.id === modelId);
+			if (model) {
+				return this.toModelConfig(model, providerName, providerConfig);
+			}
+		}
+		return undefined;
 	}
 
 	/**
 	 * 获取当前模型配置
 	 */
 	getCurrentModelConfig(): ModelConfig {
-		const config = this.config.models[this.currentModelId];
+		const config = this.getModelConfig(this.currentModelId);
 		if (!config) {
-			log.logWarning(`[ModelManager] Current model ${this.currentModelId} not found, using default`);
-			this.currentModelId = this.config.default;
-			return this.config.models[this.config.default];
+			throw new Error(`Current model ${this.currentModelId} not found`);
 		}
 		return config;
 	}
 
 	/**
 	 * 切换全局模型
+	 * 支持格式：
+	 * - "modelId" - 直接使用模型 ID
+	 * - "provider/modelId" - 指定提供商和模型
 	 */
-	switchModel(modelId: string): boolean {
-		if (!this.config.models[modelId]) {
-			log.logWarning(`[ModelManager] Model not found: ${modelId}`);
+	switchModel(modelSpec: string): boolean {
+		const { provider, modelId } = this.parseModelSpec(modelSpec);
+
+		const config = this.findModelConfig(provider, modelId);
+		if (!config) {
+			log.logWarning(`[ModelManager] Model not found: ${modelSpec}`);
 			return false;
 		}
 
 		const previousModel = this.currentModelId;
-		this.currentModelId = modelId;
+		this.currentModelId = config.id;
+		if (provider) {
+			this.currentProviderId = provider;
+		}
 
-		log.logInfo(`[ModelManager] Switched from ${previousModel} to ${modelId}`);
+		log.logInfo(`[ModelManager] Switched from ${previousModel} to ${config.id} (provider: ${config.provider})`);
 		return true;
 	}
 
 	/**
 	 * 切换频道模型
 	 */
-	switchChannelModel(channelId: string, modelId: string): boolean {
-		if (!this.config.models[modelId]) {
-			log.logWarning(`[ModelManager] Model not found: ${modelId}`);
+	switchChannelModel(channelId: string, modelSpec: string): boolean {
+		const { provider, modelId } = this.parseModelSpec(modelSpec);
+
+		const config = this.findModelConfig(provider, modelId);
+		if (!config) {
+			log.logWarning(`[ModelManager] Model not found: ${modelSpec}`);
 			return false;
 		}
 
-		this.perChannelModels.set(channelId, modelId);
-		log.logInfo(`[ModelManager] Channel ${channelId} switched to ${modelId}`);
+		this.perChannelModels.set(channelId, config.id);
+		log.logInfo(`[ModelManager] Channel ${channelId} switched to ${config.id}`);
 		return true;
+	}
+
+	/**
+	 * 解析模型规范
+	 * @param modelSpec 模型规范（如 "qwen", "dashscope/qwen-plus"）
+	 */
+	private parseModelSpec(modelSpec: string): { provider?: string; modelId: string } {
+		const slashIndex = modelSpec.indexOf("/");
+		if (slashIndex !== -1) {
+			return {
+				provider: modelSpec.substring(0, slashIndex),
+				modelId: modelSpec.substring(slashIndex + 1),
+			};
+		}
+		return { modelId: modelSpec };
+	}
+
+	/**
+	 * 查找模型配置
+	 */
+	private findModelConfig(provider?: string, modelId?: string): ModelConfig | undefined {
+		if (provider && modelId) {
+			const providerConfig = this.config.providers[provider];
+			if (providerConfig) {
+				const model = providerConfig.models.find((m) => m.id === modelId);
+				if (model) {
+					return this.toModelConfig(model, provider, providerConfig);
+				}
+			}
+		}
+
+		// 只提供 modelId，遍历所有 provider 查找
+		if (modelId) {
+			for (const [provName, provConfig] of Object.entries(this.config.providers)) {
+				const model = provConfig.models.find((m) => m.id === modelId);
+				if (model) {
+					return this.toModelConfig(model, provName, provConfig);
+				}
+			}
+		}
+
+		return undefined;
 	}
 
 	/**
@@ -169,7 +284,7 @@ export class ModelManager {
 	 */
 	async getModelInstance(channelId?: string): Promise<Model<Api>> {
 		const modelId = channelId ? this.getChannelModelId(channelId) : this.currentModelId;
-		const config = this.config.models[modelId];
+		const config = this.getModelConfig(modelId);
 
 		if (!config) {
 			throw new Error(`Model not found: ${modelId}`);
@@ -222,7 +337,8 @@ export class ModelManager {
 					: this.switchModel(modelId);
 
 				if (success) {
-					const modelName = this.config.models[modelId]?.name || modelId;
+					const modelConfig = this.getModelConfig(modelId);
+					const modelName = modelConfig?.name || modelId;
 					const scope = channelId ? `频道` : "全局";
 					log.logInfo(`[ModelManager] ${scope}模型已切换到: ${modelName}`);
 				}
@@ -268,7 +384,7 @@ export class ModelManager {
 			const config: Record<string, string> = JSON.parse(content);
 
 			for (const [channelId, modelId] of Object.entries(config)) {
-				if (this.config.models[modelId]) {
+				if (this.getModelConfig(modelId)) {
 					this.perChannelModels.set(channelId, modelId);
 				}
 			}
@@ -283,7 +399,8 @@ export class ModelManager {
 	 * 列出所有可用模型
 	 */
 	listModels(): Array<{ id: string; name: string; provider: string; current: boolean }> {
-		return Object.values(this.config.models).map((model) => ({
+		const allModels = this.getAllModels();
+		return Object.values(allModels).map((model) => ({
 			id: model.id,
 			name: model.name,
 			provider: model.provider,

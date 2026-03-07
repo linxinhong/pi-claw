@@ -5,63 +5,90 @@
  */
 
 // ============================================================================
-// Types
+// Common Types
 // ============================================================================
 
 /**
- * 模型能力声明
+ * 模型输入类型
  */
-export interface ModelCapabilities {
-	/** 是否支持视觉 */
-	vision?: boolean;
-	/** 是否支持工具调用 */
-	tools?: boolean;
-	/** 是否支持流式输出 */
-	streaming?: boolean;
+export type ModelInputType = "text" | "image" | "audio";
+
+/**
+ * 模型成本配置
+ */
+export interface ModelCost {
+	input: number;
+	output: number;
+	cacheRead?: number;
+	cacheWrite?: number;
 }
 
 /**
- * 模型默认参数
+ * OpenAI 兼容性配置
  */
-export interface ModelDefaultParams {
-	/** 温度参数 */
-	temperature?: number;
-	/** 最大 token 数 */
-	maxTokens?: number;
-	/** Top-p 采样 */
-	topP?: number;
+export interface OpenAICompat {
+	supportsDeveloperRole?: boolean;
 }
 
 /**
- * 模型配置
+ * API 类型
  */
-export interface ModelConfig {
-	/** 模型标识（如 "qwen", "glm", "kimi"） */
+export type ApiType = "openai-completions" | "anthropic-messages" | "gemini";
+
+// ============================================================================
+// Models Config Types
+// ============================================================================
+
+/**
+ * 模型定义
+ */
+export interface ModelDefinition {
+	/** 模型 ID */
 	id: string;
 	/** 模型名称 */
-	name: string;
-	/** 提供商（如 "dashscope", "zhipu", "moonshot"） */
-	provider: string;
-	/** API 基础 URL */
-	baseUrl?: string;
-	/** API Key 环境变量名 */
-	apiKeyEnv?: string;
-	/** API Key */
-	apiKey?: string;
-	/** 模型 ID（用于 API 调用） */
-	model: string;
-	/** 能力声明 */
-	capabilities?: ModelCapabilities;
-	/** 默认参数 */
-	defaultParams?: ModelDefaultParams;
+	name?: string;
+	/** wqname（内部标识） */
+	wqname?: string;
+	/** API 类型 */
+	api?: ApiType;
+	/** 是否支持推理 */
+	reasoning?: boolean;
+	/** 输入类型 */
+	input: ModelInputType[];
+	/** 成本配置 */
+	cost: ModelCost;
+	/** 上下文窗口大小 */
+	contextWindow: number;
+	/** 最大输出 token 数 */
+	maxTokens: number;
+	/** 自定义请求头 */
+	headers?: Record<string, string>;
+	/** OpenAI 兼容性配置 */
+	compat?: OpenAICompat;
 }
 
 /**
- * 模型配置文件格式
+ * 提供商配置
+ */
+export interface ProviderConfig {
+	/** API 基础 URL */
+	baseUrl?: string;
+	/** API Key（支持直接值或 "$ENV_VAR" 格式） */
+	apiKey?: string;
+	/** API 类型 */
+	api?: ApiType;
+	/** 自定义请求头 */
+	headers?: Record<string, string>;
+	/** 是否添加认证头 */
+	authHeader?: boolean;
+	/** 模型列表 */
+	models: ModelDefinition[];
+}
+
+/**
+ * 模型配置文件
  */
 export interface ModelsConfig {
-	/** 默认模型 ID */
-	default: string;
-	/** 模型配置映射 */
-	models: Record<string, ModelConfig>;
+	/** 提供商配置映射 */
+	providers: Record<string, ProviderConfig>;
 }
