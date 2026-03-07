@@ -22,6 +22,58 @@ const MAIN_LOG = join(LOGS_DIR, MAIN_LOG_FILE);
 const ERROR_LOG = join(LOGS_DIR, ERROR_LOG_FILE);
 
 // ============================================================================
+// 颜色支持
+// ============================================================================
+
+const COLORS = {
+	reset: "\x1b[0m",
+	dim: "\x1b[2m",
+	green: "\x1b[32m",
+	yellow: "\x1b[33m",
+	red: "\x1b[31m",
+	cyan: "\x1b[36m",
+	magenta: "\x1b[35m",
+};
+
+// 检测是否支持颜色
+const supportsColor = process.stdout.isTTY && process.env.NO_COLOR !== "1" && process.env.TERM !== "dumb";
+
+/**
+ * 为日志行添加颜色
+ * 日志格式: [timestamp] [category] [LEVEL] message
+ */
+function colorizeLogLine(line: string): string {
+	if (!supportsColor) return line;
+
+	// 匹配日志级别: [INFO], [WARN], [ERROR], [DEBUG]
+	const levelMatch = line.match(/\[(INFO|WARN|ERROR|DEBUG)\]/i);
+	if (!levelMatch) return line;
+
+	const level = levelMatch[1].toUpperCase();
+	let coloredLevel: string;
+
+	switch (level) {
+		case "ERROR":
+			coloredLevel = `${COLORS.red}[ERROR]${COLORS.reset}`;
+			break;
+		case "WARN":
+			coloredLevel = `${COLORS.yellow}[WARN]${COLORS.reset}`;
+			break;
+		case "INFO":
+			coloredLevel = `${COLORS.green}[INFO]${COLORS.reset}`;
+			break;
+		case "DEBUG":
+			coloredLevel = `${COLORS.dim}[DEBUG]${COLORS.reset}`;
+			break;
+		default:
+			return line;
+	}
+
+	// 替换日志级别部分
+	return line.replace(/\[(INFO|WARN|ERROR|DEBUG)\]/i, coloredLevel);
+}
+
+// ============================================================================
 // 工具函数
 // ============================================================================
 
@@ -113,6 +165,13 @@ async function readLastLines(filePath: string, lines: number): Promise<string[]>
 }
 
 /**
+ * 输出带颜色的日志行
+ */
+function printLogLine(line: string): void {
+	console.log(colorizeLogLine(line));
+}
+
+/**
  * 实时跟踪日志
  */
 async function tailFile(filePath: string): Promise<void> {
@@ -124,13 +183,22 @@ async function tailFile(filePath: string): Promise<void> {
 	// 先显示最后几行
 	const lastLines = await readLastLines(filePath, 20);
 	for (const line of lastLines) {
-		console.log(line);
+		printLogLine(line);
 	}
 
-	// 使用 tail -f 命令
+	// 使用 tail -f 并为每行添加颜色
 	const { spawn } = await import("child_process");
-	const child = spawn("tail", ["-f", filePath], {
-		stdio: "inherit",
+	const child = spawn("tail", ["-f", filePath]);
+
+	child.stdout.on("data", (data) => {
+		const lines = data.toString().split("\n").filter((l: string) => l);
+		for (const line of lines) {
+			printLogLine(line);
+		}
+	});
+
+	child.stderr.on("data", (data) => {
+		console.error(data.toString());
 	});
 
 	child.on("error", (err) => {
@@ -235,7 +303,7 @@ export function registerLogsCommand(program: Command): void {
 
 				console.log(`\nLast ${lastLines.length} lines from ${logName}:\n`);
 				for (const line of lastLines) {
-					console.log(line);
+					printLogLine(line);
 				}
 				console.log();
 			}

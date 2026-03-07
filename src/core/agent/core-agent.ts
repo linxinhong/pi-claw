@@ -213,7 +213,17 @@ export class CoreAgent {
 		const session = new AgentSession({
 			agent: state.agent!,
 			sessionManager: state.sessionManager!,
-			settingsManager: null as any,
+			settingsManager: {
+				getImageAutoResize: () => true,
+				getTheme: () => "dark",
+				getLanguage: () => "zh",
+				getEditor: () => "none",
+				getShell: () => process.env.SHELL || "/bin/bash",
+				getMcpServers: () => [],
+				getMaxTurns: () => 100,
+				getAutoCompact: () => false,
+				getAutoCompactThreshold: () => 0.8,
+			} as any,
 			cwd: process.cwd(),
 			modelRegistry: state.modelRegistry!,
 			resourceLoader,

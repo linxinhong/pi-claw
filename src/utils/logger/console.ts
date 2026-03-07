@@ -38,6 +38,21 @@ const COLORS = {
 	red: "\x1b[31m",
 };
 
+// 检测是否支持颜色（TTY 环境且未禁用颜色）
+const supportsColor = process.stdout.isTTY && process.env.NO_COLOR !== "1" && process.env.TERM !== "dumb";
+
+// 条件性应用颜色
+const color = {
+	reset: supportsColor ? COLORS.reset : "",
+	dim: supportsColor ? COLORS.dim : "",
+	green: supportsColor ? COLORS.green : "",
+	yellow: supportsColor ? COLORS.yellow : "",
+	blue: supportsColor ? COLORS.blue : "",
+	magenta: supportsColor ? COLORS.magenta : "",
+	cyan: supportsColor ? COLORS.cyan : "",
+	red: supportsColor ? COLORS.red : "",
+};
+
 function timestamp(): string {
 	return new Date().toISOString().replace("T", " ").substring(0, 19);
 }
@@ -61,7 +76,7 @@ export function getGlobalLogger(): Logger | null {
 }
 
 export function logInfo(message: string, ...args: unknown[]): void {
-	console.log(`${COLORS.dim}${timestamp()}${COLORS.reset} ${COLORS.green}INFO${COLORS.reset} ${message}`, ...args);
+	console.log(`${color.dim}${timestamp()}${color.reset} ${color.green}INFO${color.reset} ${message}`, ...args);
 
 	// 同时写入文件
 	if (globalLogger) {
@@ -70,7 +85,7 @@ export function logInfo(message: string, ...args: unknown[]): void {
 }
 
 export function logWarning(message: string, ...args: unknown[]): void {
-	console.warn(`${COLORS.dim}${timestamp()}${COLORS.reset} ${COLORS.yellow}WARN${COLORS.reset} ${message}`, ...args);
+	console.warn(`${color.dim}${timestamp()}${color.reset} ${color.yellow}WARN${color.reset} ${message}`, ...args);
 
 	// 同时写入文件
 	if (globalLogger) {
@@ -79,7 +94,7 @@ export function logWarning(message: string, ...args: unknown[]): void {
 }
 
 export function logError(message: string, ...args: unknown[]): void {
-	console.error(`${COLORS.dim}${timestamp()}${COLORS.reset} ${COLORS.red}ERROR${COLORS.reset} ${message}`, ...args);
+	console.error(`${color.dim}${timestamp()}${color.reset} ${color.red}ERROR${color.reset} ${message}`, ...args);
 
 	// 同时写入文件
 	if (globalLogger) {
@@ -91,7 +106,7 @@ export function logError(message: string, ...args: unknown[]): void {
 export function logToolStart(ctx: LogContext, toolName: string, label: string, args: Record<string, unknown>): void {
 	const channelInfo = ctx.channelName ? `#${ctx.channelName}` : ctx.channelId;
 	console.log(
-		`${COLORS.dim}${timestamp()}${COLORS.reset} ${COLORS.cyan}${channelInfo}${COLORS.reset} ${COLORS.magenta}TOOL${COLORS.reset} ${toolName}: ${label}`,
+		`${color.dim}${timestamp()}${color.reset} ${color.cyan}${channelInfo}${color.reset} ${color.magenta}TOOL${color.reset} ${toolName}: ${label}`,
 	);
 }
 
@@ -100,7 +115,7 @@ export function logToolSuccess(ctx: LogContext, toolName: string, durationMs: nu
 	const duration = (durationMs / 1000).toFixed(1);
 	const truncated = result.length > 200 ? result.substring(0, 200) + "..." : result;
 	console.log(
-		`${COLORS.dim}${timestamp()}${COLORS.reset} ${COLORS.cyan}${channelInfo}${COLORS.reset} ${COLORS.green}OK${COLORS.reset} ${toolName} (${duration}s): ${truncated}`,
+		`${color.dim}${timestamp()}${color.reset} ${color.cyan}${channelInfo}${color.reset} ${color.green}OK${color.reset} ${toolName} (${duration}s): ${truncated}`,
 	);
 }
 
@@ -108,25 +123,25 @@ export function logToolError(ctx: LogContext, toolName: string, durationMs: numb
 	const channelInfo = ctx.channelName ? `#${ctx.channelName}` : ctx.channelId;
 	const duration = (durationMs / 1000).toFixed(1);
 	console.error(
-		`${COLORS.dim}${timestamp()}${COLORS.reset} ${COLORS.cyan}${channelInfo}${COLORS.reset} ${COLORS.red}ERR${COLORS.reset} ${toolName} (${duration}s): ${error}`,
+		`${color.dim}${timestamp()}${color.reset} ${color.cyan}${channelInfo}${color.reset} ${color.red}ERR${color.reset} ${toolName} (${duration}s): ${error}`,
 	);
 }
 
 export function logResponseStart(ctx: LogContext): void {
 	const channelInfo = ctx.channelName ? `#${ctx.channelName}` : ctx.channelId;
-	console.log(`${COLORS.dim}${timestamp()}${COLORS.reset} ${COLORS.cyan}${channelInfo}${COLORS.reset} ${COLORS.blue}RESP${COLORS.reset} Starting response...`);
+	console.log(`${color.dim}${timestamp()}${color.reset} ${color.cyan}${channelInfo}${color.reset} ${color.blue}RESP${color.reset} Starting response...`);
 }
 
 export function logResponse(ctx: LogContext, text: string): void {
 	const channelInfo = ctx.channelName ? `#${ctx.channelName}` : ctx.channelId;
 	const truncated = text.length > 100 ? text.substring(0, 100) + "..." : text;
-	console.log(`${COLORS.dim}${timestamp()}${COLORS.reset} ${COLORS.cyan}${channelInfo}${COLORS.reset} ${COLORS.blue}RESP${COLORS.reset} ${truncated}`);
+	console.log(`${color.dim}${timestamp()}${color.reset} ${color.cyan}${channelInfo}${color.reset} ${color.blue}RESP${color.reset} ${truncated}`);
 }
 
 export function logThinking(ctx: LogContext, thinking: string): void {
 	const channelInfo = ctx.channelName ? `#${ctx.channelName}` : ctx.channelId;
 	const truncated = thinking.length > 100 ? thinking.substring(0, 100) + "..." : thinking;
-	console.log(`${COLORS.dim}${timestamp()}${COLORS.reset} ${COLORS.cyan}${channelInfo}${COLORS.reset} ${COLORS.magenta}THINK${COLORS.reset} ${truncated}`);
+	console.log(`${color.dim}${timestamp()}${color.reset} ${color.cyan}${channelInfo}${color.reset} ${color.magenta}THINK${color.reset} ${truncated}`);
 }
 
 export function logUsageSummary(ctx: LogContext, usage: UsageSummary, contextTokens: number, contextWindow: number): string {
@@ -137,12 +152,12 @@ export function logUsageSummary(ctx: LogContext, usage: UsageSummary, contextTok
 	const summary = `📊 Tokens: ${usage.input.toLocaleString()} in / ${usage.output.toLocaleString()} out${costStr} | Context: ${contextPercent}%`;
 
 	console.log(
-		`${COLORS.dim}${timestamp()}${COLORS.reset} ${COLORS.cyan}${channelInfo}${COLORS.reset} ${COLORS.green}USAGE${COLORS.reset} ${summary}`,
+		`${color.dim}${timestamp()}${color.reset} ${color.cyan}${channelInfo}${color.reset} ${color.green}USAGE${color.reset} ${summary}`,
 	);
 
 	return summary;
 }
 
 export function logConnected(): void {
-	console.log(`${COLORS.dim}${timestamp()}${COLORS.reset} ${COLORS.green}✓${COLORS.reset} Connected to Feishu`);
+	console.log(`${color.dim}${timestamp()}${color.reset} ${color.green}✓${color.reset} Connected to Feishu`);
 }

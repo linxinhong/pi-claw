@@ -3,7 +3,7 @@
  */
 
 import { Command } from "commander";
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, symlinkSync, unlinkSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
@@ -120,6 +120,41 @@ function replaceVariables(content: string, workspace: string): string {
 		.replace(/\$\{FEISHU_MODEL:-([^}]+)\}/g, (_, defaultVal) => process.env.FEISHU_MODEL || defaultVal);
 }
 
+function setupCliLink(projectDir: string): void {
+	const localBin = join(homedir(), ".local", "bin");
+	const cliLink = join(localBin, "pi-claw");
+	const cliPath = join(projectDir, "dist", "cli.js");
+
+	// 确保 ~/.local/bin 存在
+	if (!existsSync(localBin)) {
+		mkdirSync(localBin, { recursive: true });
+		log("✅", `Created: ${localBin}`);
+	}
+
+	// 检查/更新链接
+	if (existsSync(cliLink)) {
+		try {
+			const currentTarget = readlinkSync(cliLink);
+			if (currentTarget === cliPath) {
+				log("⏭️", `Link exists: pi-claw`);
+				return;
+			}
+			unlinkSync(cliLink);
+		} catch {
+			// ignore - 文件可能不是符号链接
+		}
+	}
+
+	symlinkSync(cliPath, cliLink);
+	log("✅", `Linked: pi-claw -> ${cliPath}`);
+
+	// PATH 提示
+	if (!process.env.PATH?.includes(".local/bin")) {
+		console.log(`\n⚠️  ~/.local/bin not in PATH. Add to ~/.bashrc or ~/.zshrc:`);
+		console.log(`   export PATH="$HOME/.local/bin:$PATH"`);
+	}
+}
+
 // ============================================================================
 // 命令实现
 // ============================================================================
@@ -223,6 +258,11 @@ export function registerInitCommand(program: Command): void {
 				console.log("\n📋 Dry run complete. Run without --dry-run to create files.\n");
 				return;
 			}
+
+			// 设置 CLI 符号链接
+			console.log("\n🔗 Setting up CLI link...");
+			const projectDir = join(__dirname, "..", "..", "..");
+			setupCliLink(projectDir);
 
 			console.log(`
 ✅ Workspace initialized successfully!
