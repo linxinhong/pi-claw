@@ -18,6 +18,7 @@ import {
 import { readFileSync } from "fs";
 import { mkdir } from "fs/promises";
 import { join } from "path";
+import { getChannelDir } from "../../utils/config.js";
 import type { AgentContext } from "./context.js";
 import { buildSystemPrompt, loadMemoryContent, loadSkills } from "./prompt-builder.js";
 import type { ModelManager } from "../model/manager.js";
@@ -135,7 +136,7 @@ export class CoreAgent {
 		additionalContext: Partial<AgentContext>,
 	): Promise<string> {
 		const chatId = message.chat.id;
-		const channelDir = join(this.config.workspaceDir, chatId);
+		const channelDir = getChannelDir(chatId);
 
 		// 确保目录存在
 		await mkdir(channelDir, { recursive: true });
