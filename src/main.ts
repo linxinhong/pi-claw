@@ -18,6 +18,7 @@ import * as log from "./utils/logger/index.js";
 import { createGlobalLogger, PiLogger } from "./utils/logger/index.js";
 import type { LogConfig } from "./utils/logger/index.js";
 import { getHookManager, HOOK_NAMES } from "./core/hook/index.js";
+import { ConfigManager } from "./core/config/manager.js";
 
 // 重新导出主要入口函数和类型（供外部使用）
 export { createFeishuBot } from "./adapters/feishu/index.js";
@@ -78,6 +79,13 @@ export async function main(options: MainOptions = {}): Promise<void> {
 
 	// 初始化全局 HookManager
 	const hookManager = getHookManager();
+
+	// 初始化 ConfigManager（单例模式）
+	const configManager = ConfigManager.getInstance({
+		configPath: options.configPath,
+		hookManager,
+		enableWatch: true, // 启用热更新
+	});
 
 	// 处理 sandbox 配置（CLI 参数优先）
 	let sandboxConfig: SandboxConfig | undefined;

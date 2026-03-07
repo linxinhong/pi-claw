@@ -143,6 +143,12 @@ export const HOOK_NAMES = {
 
 	// 系统提示词
 	SYSTEM_PROMPT_BUILD: "system-prompt:build",
+
+	// 配置管理
+	CONFIG_LOAD: "config:load",
+	CONFIG_CHANGE: "config:change",
+	CONFIG_RELOAD: "config:reload",
+	CONFIG_SAVE: "config:save",
 } as const;
 
 export type HookName = (typeof HOOK_NAMES)[keyof typeof HOOK_NAMES];
@@ -290,6 +296,26 @@ export interface ModelGetEndContext {
 	timestamp: Date;
 }
 
+/**
+ * 配置 Hook 上下文
+ */
+export interface ConfigHookContext {
+	/** 配置类型 */
+	configType: "global" | "model" | "channel";
+	/** 配置键名 */
+	configKey?: string;
+	/** 频道 ID（仅 channel 类型） */
+	channelId?: string;
+	/** 旧值 */
+	oldValue?: unknown;
+	/** 新值 */
+	newValue?: unknown;
+	/** 时间戳 */
+	timestamp: Date;
+	/** 变更来源 */
+	source: "file" | "api" | "command";
+}
+
 // ============================================================================
 // Type Map
 // ============================================================================
@@ -319,4 +345,8 @@ export interface HookContextMap {
 	[HOOK_NAMES.AGENT_INIT_END]: AgentInitEndContext;
 	[HOOK_NAMES.MODEL_GET_START]: ModelGetStartContext;
 	[HOOK_NAMES.MODEL_GET_END]: ModelGetEndContext;
+	[HOOK_NAMES.CONFIG_LOAD]: ConfigHookContext;
+	[HOOK_NAMES.CONFIG_CHANGE]: ConfigHookContext;
+	[HOOK_NAMES.CONFIG_RELOAD]: ConfigHookContext;
+	[HOOK_NAMES.CONFIG_SAVE]: ConfigHookContext;
 }

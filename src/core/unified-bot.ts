@@ -14,6 +14,7 @@ import { ModelManager } from "./model/index.js";
 import { createExecutor } from "./sandbox/index.js";
 import { EventsWatcher } from "./services/event/index.js";
 import { getHookManager, HOOK_NAMES } from "./hook/index.js";
+import { ConfigManager } from "./config/manager.js";
 import { logMessageReceive, logMessageReply } from "../utils/logger/console.js";
 import { join } from "path";
 
@@ -61,8 +62,21 @@ export class UnifiedBot {
 		this.pluginManager = config.pluginManager;
 		this.adapter = config.adapter;
 
+		// 获取 ConfigManager 单例
+		let configManager: ConfigManager | undefined;
+		try {
+			configManager = ConfigManager.getInstance();
+		} catch {
+			// ConfigManager 未初始化，使用旧模式
+		}
+
 		// 创建模型管理器（使用配置中的默认模型）
 		this.modelManager = new ModelManager(undefined, config.defaultModel);
+
+		// 如果 ConfigManager 可用，设置到 ModelManager
+		if (configManager) {
+			this.modelManager.setConfigManager(configManager);
+		}
 
 		// 获取 adapter 默认模型
 		const adapterDefaultModel = this.adapter.getDefaultModel?.();
@@ -70,10 +84,12 @@ export class UnifiedBot {
 		// 创建核心 Agent
 		this.coreAgent = createCoreAgent({
 			modelManager: this.modelManager,
+			configManager,
 			executor: createExecutor({ type: "host" }),
 			workspaceDir: config.workingDir,
 			eventBus: null, // 可以传入 EventBus
 			adapterDefaultModel,
+			hookManager: getHookManager(),
 		});
 
 		// 订阅适配器消息

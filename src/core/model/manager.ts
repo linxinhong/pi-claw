@@ -5,13 +5,14 @@
  */
 
 import type { Api, Model } from "@mariozechner/pi-ai";
-import { join } from "path";
+import { join, basename } from "path";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { PROJECT_ROOT } from "../../utils/config.js";
 import { loadModelsConfig } from "./config.js";
 import type { ModelsConfig, ModelDefinition, ProviderConfig } from "./types.js";
 import * as log from "../../utils/logger/index.js";
 import { ModelRegistry, AuthStorage } from "@mariozechner/pi-coding-agent";
+import type { ConfigManager } from "../config/manager.js";
 
 // ============================================================================
 // Legacy Type (for backward compatibility in return values)
@@ -62,6 +63,7 @@ export class ModelManager {
 	private perChannelModels: Map<string, string>;
 	private modelRegistry: ModelRegistry;
 	private authStorage: AuthStorage;
+	private configManager?: ConfigManager;
 
 	constructor(configPath?: string, defaultModelId?: string) {
 		const path = configPath || join(PROJECT_ROOT, "models.json");
@@ -402,6 +404,8 @@ export class ModelManager {
 
 	/**
 	 * 从文件加载频道模型配置
+	 * 支持新格式: { "model": "qwen-plus", "maxHistoryMessages": 30 }
+	 * 和旧格式: { "oc_xxx": "qwen-plus" }
 	 */
 	loadChannelModels(configPath: string): void {
 		try {
@@ -410,18 +414,65 @@ export class ModelManager {
 			}
 
 			const content = readFileSync(configPath, "utf-8");
-			const config: Record<string, string> = JSON.parse(content);
+			const config = JSON.parse(content);
 
-			for (const [channelId, modelId] of Object.entries(config)) {
+			// 从路径中提取 channelId
+			const channelId = this.extractChannelId(configPath);
+
+			// 新格式：配置中有 "model" 字段
+			if (config.model && typeof config.model === "string") {
+				const modelId = config.model;
 				if (this.getModelConfig(modelId)) {
 					this.perChannelModels.set(channelId, modelId);
+					log.logInfo(`[ModelManager] Loaded channel ${channelId} model: ${modelId}`);
 				}
 			}
-
-			log.logInfo(`[ModelManager] Loaded ${Object.keys(config).length} channel model preferences`);
+			// 旧格式：Record<channelId, modelId>
+			else {
+				for (const [chId, modelId] of Object.entries(config)) {
+					if (typeof modelId === "string" && this.getModelConfig(modelId)) {
+						this.perChannelModels.set(chId, modelId);
+					}
+				}
+				log.logInfo(`[ModelManager] Loaded ${Object.keys(config).length} channel model preferences (legacy format)`);
+			}
 		} catch (error) {
 			log.logWarning(`[ModelManager] Failed to load channel model config: ${error}`);
 		}
+	}
+
+	/**
+	 * 从配置文件路径中提取 channelId
+	 */
+	private extractChannelId(configPath: string): string {
+		// 路径格式: ~/.pi-claw/channels/{channelId}/channel-config.json
+		const parts = configPath.split("/");
+		const channelsIndex = parts.indexOf("channels");
+		if (channelsIndex !== -1 && channelsIndex + 1 < parts.length) {
+			return parts[channelsIndex + 1];
+		}
+		// 回退：使用文件名
+		return configPath;
+	}
+
+	/**
+	 * 设置 ConfigManager 并监听配置变更
+	 */
+	setConfigManager(configManager: ConfigManager): void {
+		this.configManager = configManager;
+
+		// 监听频道模型变更
+		configManager.addChangeListener(
+			(configType, key, newValue, _oldValue, channelId) => {
+				if (configType === "channel" && key === "model" && channelId) {
+					const modelId = newValue as string;
+					if (this.getModelConfig(modelId)) {
+						this.perChannelModels.set(channelId, modelId);
+						log.logInfo(`[ModelManager] Channel ${channelId} model updated to ${modelId} via ConfigManager`);
+					}
+				}
+			},
+		);
 	}
 
 	/**

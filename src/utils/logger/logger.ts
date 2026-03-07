@@ -43,10 +43,12 @@ function ensureDir(dir: string): void {
 }
 
 /**
- * 获取时间戳
+ * 获取时间戳（本地时间）
  */
 function getTimestamp(): string {
-	return new Date().toISOString().replace("T", " ").substring(0, 19);
+	const d = new Date();
+	const pad = (n: number) => n.toString().padStart(2, "0");
+	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 /**
