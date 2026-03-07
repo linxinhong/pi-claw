@@ -1,6 +1,10 @@
 /**
- * Log - 日志工具
+ * Console Log - 控制台日志工具
+ *
+ * 提供控制台日志输出，同时支持集成全局 Logger 写入文件
  */
+
+import type { Logger } from "./index.js";
 
 interface LogContext {
 	channelId: string;
@@ -38,16 +42,50 @@ function timestamp(): string {
 	return new Date().toISOString().replace("T", " ").substring(0, 19);
 }
 
+// 全局 Logger 引用
+let globalLogger: Logger | null = null;
+
+/**
+ * 设置全局 Logger
+ * 设置后，log 函数会同时写入文件
+ */
+export function setGlobalLogger(logger: Logger): void {
+	globalLogger = logger;
+}
+
+/**
+ * 获取全局 Logger
+ */
+export function getGlobalLogger(): Logger | null {
+	return globalLogger;
+}
+
 export function logInfo(message: string, ...args: unknown[]): void {
 	console.log(`${COLORS.dim}${timestamp()}${COLORS.reset} ${COLORS.green}INFO${COLORS.reset} ${message}`, ...args);
+
+	// 同时写入文件
+	if (globalLogger) {
+		globalLogger.info(message, args.length > 0 ? { args } : undefined);
+	}
 }
 
 export function logWarning(message: string, ...args: unknown[]): void {
 	console.warn(`${COLORS.dim}${timestamp()}${COLORS.reset} ${COLORS.yellow}WARN${COLORS.reset} ${message}`, ...args);
+
+	// 同时写入文件
+	if (globalLogger) {
+		globalLogger.warn(message, args.length > 0 ? { args } : undefined);
+	}
 }
 
 export function logError(message: string, ...args: unknown[]): void {
 	console.error(`${COLORS.dim}${timestamp()}${COLORS.reset} ${COLORS.red}ERROR${COLORS.reset} ${message}`, ...args);
+
+	// 同时写入文件
+	if (globalLogger) {
+		const error = args.length > 0 && args[0] instanceof Error ? args[0] : undefined;
+		globalLogger.error(message, args.length > 0 ? { args: args.filter(a => !(a instanceof Error)) } : undefined, error);
+	}
 }
 
 export function logToolStart(ctx: LogContext, toolName: string, label: string, args: Record<string, unknown>): void {

@@ -19,6 +19,8 @@ import type {
 import type { PlatformContext } from "../../core/platform/context.js";
 import { FeishuPlatformContext } from "./context.js";
 import { parseFeishuMessage } from "./message-parser.js";
+import type { Logger } from "../../utils/logger/index.js";
+import { PiLogger } from "../../utils/logger/index.js";
 
 // ============================================================================
 // Types
@@ -38,6 +40,8 @@ export interface FeishuAdapterConfig extends PlatformConfig {
 	useWebSocket?: boolean;
 	/** 服务端口 */
 	port?: number;
+	/** 日志器 */
+	logger?: Logger;
 }
 
 /**
@@ -86,6 +90,7 @@ export class FeishuAdapter implements PlatformAdapter {
 	private wsClient: lark.WSClient | null = null;
 	private app: ReturnType<typeof express> | null = null;
 	private workingDir: string;
+	private logger: Logger;
 
 	private users = new Map<string, UserInfo>();
 	private channels = new Map<string, ChannelInfo>();
@@ -97,6 +102,7 @@ export class FeishuAdapter implements PlatformAdapter {
 
 	constructor(config: FeishuAdapterConfig) {
 		this.workingDir = config.workingDir;
+		this.logger = config.logger || new PiLogger("feishu:adapter");
 
 		this.client = new lark.Client({
 			appId: config.appId,
@@ -111,6 +117,8 @@ export class FeishuAdapter implements PlatformAdapter {
 				loggerLevel: lark.LoggerLevel.info,
 			});
 		}
+
+		this.logger.debug("FeishuAdapter initialized", { appId: config.appId });
 	}
 
 	// ========================================================================
@@ -124,7 +132,7 @@ export class FeishuAdapter implements PlatformAdapter {
 	async start(): Promise<void> {
 		// 获取用户和频道列表
 		await Promise.all([this.fetchUsers(), this.fetchChannels()]);
-		console.log(`[FeishuAdapter] Loaded ${this.channels.size} channels, ${this.users.size} users`);
+		this.logger.info(`Loaded ${this.channels.size} channels, ${this.users.size} users`);
 
 		// 记录启动时间
 		this.startupTs = Date.now().toString();
@@ -137,13 +145,11 @@ export class FeishuAdapter implements PlatformAdapter {
 	}
 
 	async stop(): Promise<void> {
-		// TODO: 实现停止逻辑
-		console.log("[FeishuAdapter] Stopped");
+		this.logger.info("FeishuAdapter stopped");
 	}
 
 	async sendMessage(response: UniversalResponse): Promise<void> {
-		// TODO: 实现发送消息逻辑
-		console.log("[FeishuAdapter] Sending message:", response);
+		this.logger.debug("Sending message", { response });
 	}
 
 	async updateMessage(messageId: string, response: UniversalResponse): Promise<void> {
@@ -386,7 +392,7 @@ export class FeishuAdapter implements PlatformAdapter {
 	}
 
 	private async startWebSocket(): Promise<void> {
-		console.log("[FeishuAdapter] Starting WebSocket mode...");
+		this.logger.info("Starting WebSocket mode");
 
 		const eventDispatcher = new lark.EventDispatcher({}).register({
 			"im.message.receive_v1": async (data: any) => {
@@ -395,11 +401,11 @@ export class FeishuAdapter implements PlatformAdapter {
 		});
 
 		this.wsClient!.start({ eventDispatcher });
-		console.log("[FeishuAdapter] WebSocket client started");
+		this.logger.info("WebSocket client started");
 	}
 
 	private async startWebhook(port: number): Promise<void> {
-		console.log("[FeishuAdapter] Starting HTTP webhook mode...");
+		this.logger.info("Starting HTTP webhook mode", { port });
 
 		this.app = express();
 		this.app.use(express.json({ limit: "10mb" }));
@@ -414,7 +420,7 @@ export class FeishuAdapter implements PlatformAdapter {
 
 		return new Promise((resolve, reject) => {
 			this.app!.listen(port, () => {
-				console.log(`[FeishuAdapter] Server listening on port ${port}`);
+				this.logger.info(`Server listening on port ${port}`);
 				resolve();
 			}).on("error", reject);
 		});
@@ -459,7 +465,7 @@ export class FeishuAdapter implements PlatformAdapter {
 
 		// 跳过旧消息
 		if (this.startupTs && universalMessage.timestamp.getTime() < parseInt(this.startupTs)) {
-			console.log(`[FeishuAdapter] Skipping old message: ${universalMessage.content.substring(0, 30)}`);
+			this.logger.debug(`Skipping old message: ${universalMessage.content.substring(0, 30)}`);
 			return;
 		}
 
@@ -468,7 +474,7 @@ export class FeishuAdapter implements PlatformAdapter {
 			try {
 				await handler(universalMessage);
 			} catch (error) {
-				console.error("[FeishuAdapter] Message handler error:", error);
+				this.logger.error("Message handler error", undefined, error instanceof Error ? error : new Error(String(error)));
 			}
 		}
 	}
@@ -496,7 +502,7 @@ export class FeishuAdapter implements PlatformAdapter {
 				pageToken = result.data?.page_token;
 			} while (pageToken);
 		} catch (err) {
-			console.error("[FeishuAdapter] Failed to fetch users:", err);
+			this.logger.error("Failed to fetch users", undefined, err instanceof Error ? err : new Error(String(err)));
 		}
 	}
 
@@ -523,7 +529,7 @@ export class FeishuAdapter implements PlatformAdapter {
 				pageToken = result.data?.page_token;
 			} while (pageToken);
 		} catch (err) {
-			console.error("[FeishuAdapter] Failed to fetch channels:", err);
+			this.logger.error("Failed to fetch channels", undefined, err instanceof Error ? err : new Error(String(err)));
 		}
 	}
 

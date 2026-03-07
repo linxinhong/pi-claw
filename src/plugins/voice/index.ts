@@ -13,7 +13,7 @@ import { homedir } from "os";
 import { join } from "path";
 import type { Plugin, PluginContext, MessageEvent, PluginInitContext } from "../../core/plugin/types.js";
 import { CAPABILITIES } from "../../core/plugin/types.js";
-import * as log from "../../utils/log.js";
+import * as log from "../../utils/logger/index.js";
 
 // ============================================================================
 // Types

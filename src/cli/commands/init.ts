@@ -1,36 +1,13 @@
-#!/usr/bin/env node
 /**
- * Workspace 初始化脚本 (TypeScript 版本)
- *
- * 用法:
- *   npx tsx scripts/init-workspace.ts [workspace-dir] [--force]
- *
- * 选项:
- *   --force    强制覆盖已存在的文件
- *   --dry-run  只显示会创建的文件，不实际创建
+ * init 命令 - 初始化工作目录
  */
 
+import { Command } from "commander";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
-
-// ESM 获取 __dirname
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// 解析命令行参数
-const args = process.argv.slice(2);
-const forceMode = args.includes("--force");
-const dryRun = args.includes("--dry-run");
-const workspaceArg = args.find((a) => !a.startsWith("--"));
-
-// 默认 workspace 目录
-const DEFAULT_WORKSPACE = join(homedir(), ".pi-claw");
-const WORKSPACE = resolve(workspaceArg || DEFAULT_WORKSPACE);
-
-// 模板目录
-const TEMPLATES_DIR = join(__dirname, "..", "templates");
+import { printSuccess, printError, printWarning, printInfo, COLORS } from "../utils/output.js";
 
 // ============================================================================
 // 类型定义
@@ -96,7 +73,7 @@ const FILES: FileConfig[] = [
 		permissions: 0o644,
 	},
 
-	// 目录占位 - 全局
+	// 目录占位
 	{
 		path: "skills/.gitkeep",
 		template: "skills/.gitkeep",
@@ -135,99 +112,119 @@ function log(emoji: string, message: string): void {
 	console.log(`   ${emoji} ${message}`);
 }
 
-function replaceVariables(content: string): string {
+function replaceVariables(content: string, workspace: string): string {
 	return content
-		.replace(/\$\{WORKSPACE\}/g, WORKSPACE)
+		.replace(/\$\{WORKSPACE\}/g, workspace)
 		.replace(/\$\{FEISHU_APP_ID\}/g, process.env.FEISHU_APP_ID || "your_app_id")
 		.replace(/\$\{FEISHU_APP_SECRET\}/g, process.env.FEISHU_APP_SECRET || "your_app_secret")
 		.replace(/\$\{FEISHU_MODEL:-([^}]+)\}/g, (_, defaultVal) => process.env.FEISHU_MODEL || defaultVal);
 }
 
 // ============================================================================
-// 主逻辑
+// 命令实现
 // ============================================================================
 
-async function main(): Promise<void> {
-	console.log(`\n🚀 Initializing workspace: ${WORKSPACE}\n`);
+export function registerInitCommand(program: Command): void {
+	program
+		.command("init [path]")
+		.description("初始化工作目录")
+		.option("--force", "强制覆盖已存在的文件")
+		.option("--dry-run", "只显示会创建的文件，不实际创建")
+		.action(async (workspaceArg, options) => {
+			// ESM 获取 __dirname
+			const __filename = fileURLToPath(import.meta.url);
+			const __dirname = dirname(__filename);
 
-	if (dryRun) {
-		console.log("📋 Dry run mode - showing what would be created:\n");
-	}
+			// 默认 workspace 目录
+			const DEFAULT_WORKSPACE = join(homedir(), ".pi-claw");
+			const WORKSPACE = resolve(workspaceArg || DEFAULT_WORKSPACE);
 
-	// 创建目录
-	console.log("📁 Creating directory structure...");
-	const dirs = new Set<string>();
-	for (const file of FILES) {
-		dirs.add(dirname(join(WORKSPACE, file.path)));
-	}
+			// 模板目录
+			const TEMPLATES_DIR = join(__dirname, "..", "..", "..", "templates");
 
-	for (const dir of dirs) {
-		if (dryRun) {
-			log("📂", `Would create: ${dir}`);
-		} else if (!existsSync(dir)) {
-			mkdirSync(dir, { recursive: true });
-			log("✅", `Created: ${dir}`);
-		} else {
-			log("⏭️", `Exists: ${dir}`);
-		}
-	}
+			const forceMode = options.force || false;
+			const dryRun = options.dryRun || false;
 
-	// 创建文件
-	console.log("\n📄 Creating files...");
+			console.log(`\n🚀 Initializing workspace: ${WORKSPACE}\n`);
 
-	for (const file of FILES) {
-		const fullPath = join(WORKSPACE, file.path);
+			if (dryRun) {
+				console.log("📋 Dry run mode - showing what would be created:\n");
+			}
 
-		// 检查文件是否存在
-		if (existsSync(fullPath) && !forceMode) {
-			log("⏭️", `Exists: ${file.path}`);
-			continue;
-		}
+			// 创建目录
+			console.log("📁 Creating directory structure...");
+			const dirs = new Set<string>();
+			for (const file of FILES) {
+				dirs.add(dirname(join(WORKSPACE, file.path)));
+			}
 
-		if (dryRun) {
-			const status = file.readonly ? "🔒 (readonly)" : "";
-			log("📝", `Would create: ${file.path} ${status}`);
-			continue;
-		}
+			for (const dir of dirs) {
+				if (dryRun) {
+					log("📂", `Would create: ${dir}`);
+				} else if (!existsSync(dir)) {
+					mkdirSync(dir, { recursive: true });
+					log("✅", `Created: ${dir}`);
+				} else {
+					log("⏭️", `Exists: ${dir}`);
+				}
+			}
 
-		// 获取内容
-		let content: string;
-		const templatePath = join(TEMPLATES_DIR, file.template);
-		if (existsSync(templatePath)) {
-			content = readFileSync(templatePath, "utf-8");
-		} else {
-			console.warn(`   ⚠️ Template not found: ${file.template}`);
-			continue;
-		}
+			// 创建文件
+			console.log("\n📄 Creating files...");
 
-		// 替换变量
-		if (file.replaceVars) {
-			content = replaceVariables(content);
-		}
+			for (const file of FILES) {
+				const fullPath = join(WORKSPACE, file.path);
 
-		// 写入文件
-		writeFileSync(fullPath, content, "utf-8");
+				// 检查文件是否存在
+				if (existsSync(fullPath) && !forceMode) {
+					log("⏭️", `Exists: ${file.path}`);
+					continue;
+				}
 
-		// 设置权限
-		if (file.permissions) {
-			chmodSync(fullPath, file.permissions);
-		}
+				if (dryRun) {
+					const status = file.readonly ? "🔒 (readonly)" : "";
+					log("📝", `Would create: ${file.path} ${status}`);
+					continue;
+				}
 
-		// 日志
-		if (file.readonly) {
-			log("🔒", `${file.path} (600)`);
-		} else {
-			log("✅", file.path);
-		}
-	}
+				// 获取内容
+				let content: string;
+				const templatePath = join(TEMPLATES_DIR, file.template);
+				if (existsSync(templatePath)) {
+					content = readFileSync(templatePath, "utf-8");
+				} else {
+					printWarning(`Template not found: ${file.template}`);
+					continue;
+				}
 
-	// 完成
-	if (dryRun) {
-		console.log("\n📋 Dry run complete. Run without --dry-run to create files.\n");
-		return;
-	}
+				// 替换变量
+				if (file.replaceVars) {
+					content = replaceVariables(content, WORKSPACE);
+				}
 
-	console.log(`
+				// 写入文件
+				writeFileSync(fullPath, content, "utf-8");
+
+				// 设置权限
+				if (file.permissions) {
+					chmodSync(fullPath, file.permissions);
+				}
+
+				// 日志
+				if (file.readonly) {
+					log("🔒", `${file.path} (600)`);
+				} else {
+					log("✅", file.path);
+				}
+			}
+
+			// 完成
+			if (dryRun) {
+				console.log("\n📋 Dry run complete. Run without --dry-run to create files.\n");
+				return;
+			}
+
+			console.log(`
 ✅ Workspace initialized successfully!
 
 📋 Next steps:
@@ -247,21 +244,12 @@ async function main(): Promise<void> {
       ${join(WORKSPACE, "boot/tools.md")}
 
    5. Start the bot:
-      npm run dev
+      pi-claw start
 
 🔒 Protected files (600):
    - boot/soul.md
    - boot/identity.md
    - boot/tools.md
-
-   To modify protected files:
-   npm run unlock
-   # edit files
-   npm run lock
 `);
+		});
 }
-
-main().catch((err) => {
-	console.error("❌ Error:", err.message);
-	process.exit(1);
-});

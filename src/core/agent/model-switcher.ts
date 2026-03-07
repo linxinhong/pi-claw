@@ -5,7 +5,7 @@
  */
 
 import type { ModelManager } from "../model/manager.js";
-import * as log from "../../utils/log.js";
+import * as log from "../../utils/logger/index.js";
 
 // ============================================================================
 // Types

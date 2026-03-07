@@ -9,7 +9,7 @@ import { join } from "path";
 import { AGENT_DIR } from "../../utils/config.js";
 import { loadModelConfig, getModelApiKey } from "./config.js";
 import type { ModelConfig, ModelsConfig } from "./types.js";
-import * as log from "../../utils/log.js";
+import * as log from "../../utils/logger/index.js";
 import { ModelRegistry, AuthStorage } from "@mariozechner/pi-coding-agent";
 
 // ============================================================================

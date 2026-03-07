@@ -8,7 +8,7 @@
 import { Type, Static } from "@sinclair/typebox";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import type { Plugin, PluginContext, PluginInitContext } from "../../../core/plugin/types.js";
-import * as log from "../../../utils/log.js";
+import * as log from "../../../utils/logger/index.js";
 
 // ============================================================================
 // Types

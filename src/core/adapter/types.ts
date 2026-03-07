@@ -8,6 +8,7 @@ import type { PlatformAdapter } from "../platform/adapter.js";
 import type { PlatformStore } from "../store/types.js";
 import type { PluginManager } from "../plugin/manager.js";
 import type { SandboxConfig } from "../sandbox/index.js";
+import type { LogConfig, Logger } from "../../utils/logger/index.js";
 
 // ============================================================================
 // Adapter Metadata
@@ -43,6 +44,8 @@ export interface BotConfig {
 	sandbox?: SandboxConfig;
 	/** 端口号 */
 	port?: number;
+	/** 日志配置 */
+	logging?: LogConfig;
 	/** 其他平台特定配置 */
 	[key: string]: any;
 }
@@ -116,4 +119,6 @@ export interface AdapterContext {
 	store: PlatformStore;
 	/** 插件管理器 */
 	pluginManager: PluginManager;
+	/** 日志器 */
+	logger?: Logger;
 }

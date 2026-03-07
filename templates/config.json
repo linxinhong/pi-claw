@@ -1,0 +1,27 @@
+{
+	"workspaceDir": "${WORKSPACE}",
+	"port": 3000,
+	"model": "qwen",
+	"compaction": {
+		"enabled": true,
+		"reserveTokens": 16384,
+		"keepRecentTokens": 20000
+	},
+	"retry": {
+		"enabled": true,
+		"maxRetries": 3,
+		"baseDelayMs": 2000
+	},
+	"plugins": {
+		"agent": { "enabled": true, "maxHistoryMessages": 20 },
+		"voice": { "enabled": true, "defaultVoice": "Cherry" },
+		"memory": { "enabled": true, "maxHistoryMessages": 10 },
+		"card": { "enabled": true },
+		"event": { "enabled": false }
+	},
+	"feishu": {
+		"appId": "${FEISHU_APP_ID}",
+		"appSecret": "${FEISHU_APP_SECRET}",
+		"useWebSocket": true
+	}
+}
