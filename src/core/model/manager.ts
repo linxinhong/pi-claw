@@ -6,6 +6,7 @@
 
 import type { Api, Model } from "@mariozechner/pi-ai";
 import { join } from "path";
+import { existsSync, readFileSync, writeFileSync } from "fs";
 import { PROJECT_ROOT } from "../../utils/config.js";
 import { loadModelsConfig } from "./config.js";
 import type { ModelsConfig, ModelDefinition, ProviderConfig } from "./types.js";
@@ -62,14 +63,26 @@ export class ModelManager {
 	private modelRegistry: ModelRegistry;
 	private authStorage: AuthStorage;
 
-	constructor(configPath?: string) {
+	constructor(configPath?: string, defaultModelId?: string) {
 		const path = configPath || join(PROJECT_ROOT, "models.json");
 		this.config = loadModelsConfig(path);
 
-		// 使用第一个 provider 的第一个 model 作为默认
+		// 初始化默认值
 		const firstProvider = Object.keys(this.config.providers)[0];
 		this.currentProviderId = firstProvider;
 		this.currentModelId = this.config.providers[firstProvider]?.models[0]?.id || "";
+
+		// 如果指定了默认模型且存在，使用它
+		if (defaultModelId) {
+			const modelConfig = this.getModelConfig(defaultModelId);
+			if (modelConfig) {
+				this.currentModelId = defaultModelId;
+				this.currentProviderId = modelConfig.provider;
+				log.logInfo(`[ModelManager] Using configured default model: ${defaultModelId}`);
+			} else {
+				log.logWarning(`[ModelManager] Configured default model "${defaultModelId}" not found, using fallback: ${this.currentModelId}`);
+			}
+		}
 
 		this.perChannelModels = new Map();
 		this.authStorage = AuthStorage.create();
@@ -266,9 +279,23 @@ export class ModelManager {
 
 	/**
 	 * 获取频道模型 ID
+	 * @param channelId 频道 ID
+	 * @param adapterDefaultModel adapter 级别默认模型（可选）
+	 * @returns 模型 ID（优先级：Channel > Adapter > Global）
 	 */
-	getChannelModelId(channelId: string): string {
-		return this.perChannelModels.get(channelId) || this.currentModelId;
+	getChannelModelId(channelId: string, adapterDefaultModel?: string): string {
+		// 1. 优先使用 channel 级别模型
+		if (this.perChannelModels.has(channelId)) {
+			return this.perChannelModels.get(channelId)!;
+		}
+
+		// 2. 其次使用 adapter 默认模型
+		if (adapterDefaultModel) {
+			return adapterDefaultModel;
+		}
+
+		// 3. 最后使用全局默认模型
+		return this.currentModelId;
 	}
 
 	/**
@@ -281,9 +308,13 @@ export class ModelManager {
 
 	/**
 	 * 获取模型实例（用于 Agent）
+	 * @param channelId 频道 ID（可选）
+	 * @param adapterDefaultModel adapter 级别默认模型（可选）
 	 */
-	async getModelInstance(channelId?: string): Promise<Model<Api>> {
-		const modelId = channelId ? this.getChannelModelId(channelId) : this.currentModelId;
+	async getModelInstance(channelId?: string, adapterDefaultModel?: string): Promise<Model<Api>> {
+		const modelId = channelId
+			? this.getChannelModelId(channelId, adapterDefaultModel)
+			: this.currentModelId;
 		const config = this.getModelConfig(modelId);
 
 		if (!config) {
@@ -355,16 +386,15 @@ export class ModelManager {
 	 */
 	saveChannelModel(channelId: string, modelId: string, configPath: string): void {
 		try {
-			const fs = require("fs");
 			let config: Record<string, string> = {};
 
-			if (fs.existsSync(configPath)) {
-				const content = fs.readFileSync(configPath, "utf-8");
+			if (existsSync(configPath)) {
+				const content = readFileSync(configPath, "utf-8");
 				config = JSON.parse(content);
 			}
 
 			config[channelId] = modelId;
-			fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+			writeFileSync(configPath, JSON.stringify(config, null, 2));
 		} catch (error) {
 			log.logWarning(`[ModelManager] Failed to save channel model config: ${error}`);
 		}
@@ -375,12 +405,11 @@ export class ModelManager {
 	 */
 	loadChannelModels(configPath: string): void {
 		try {
-			const fs = require("fs");
-			if (!fs.existsSync(configPath)) {
+			if (!existsSync(configPath)) {
 				return;
 			}
 
-			const content = fs.readFileSync(configPath, "utf-8");
+			const content = readFileSync(configPath, "utf-8");
 			const config: Record<string, string> = JSON.parse(content);
 
 			for (const [channelId, modelId] of Object.entries(config)) {
