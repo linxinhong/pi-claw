@@ -314,26 +314,25 @@ export class EventsWatcher {
 	 * 创建事件
 	 * @param name 事件名称（不含 .json 后缀）
 	 * @param event 事件数据
+	 * @returns 成功时返回 { success: true, filename }，失败时返回 { success: false, error }
 	 */
-	createEvent(name: string, event: ScheduledEvent): { success: boolean; error?: string } {
+	createEvent(name: string, event: ScheduledEvent): { success: boolean; error?: string; filename?: string } {
 		try {
 			// 确保目录存在
 			if (!existsSync(this.eventsDir)) {
 				mkdirSync(this.eventsDir, { recursive: true });
 			}
 
-			const filename = name.endsWith(".json") ? name : `${name}.json`;
+			// 移除可能的 .json 后缀，然后添加时间戳
+			const baseName = name.endsWith(".json") ? name.slice(0, -5) : name;
+			const timestamp = Math.floor(Date.now() / 1000); // Unix timestamp in seconds
+			const filename = `${baseName}-${timestamp}.json`;
 			const filePath = join(this.eventsDir, filename);
-
-			// 检查是否已存在
-			if (existsSync(filePath)) {
-				return { success: false, error: `Event "${name}" already exists` };
-			}
 
 			// 写入文件
 			writeFileSync(filePath, JSON.stringify(event, null, 2), "utf-8");
 
-			return { success: true };
+			return { success: true, filename };
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			return { success: false, error: message };

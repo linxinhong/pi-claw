@@ -37,7 +37,7 @@ describe("Event Tools", () => {
 			expect(tool.name).toBe("event_create");
 		});
 
-		it("should create immediate event", async () => {
+		it("should create immediate event with timestamp in filename", async () => {
 			const tool = createEventCreateTool(watcher, "default-channel");
 			const result = await tool.execute("test-id", {
 				type: "immediate",
@@ -48,7 +48,8 @@ describe("Event Tools", () => {
 
 			expect(result.details?.created).toBe(true);
 			expect(result.details?.name).toBe("test-immediate");
-			expect(existsSync(join(eventsDir, "test-immediate.json"))).toBe(true);
+			expect(result.details?.filename).toMatch(/^test-immediate-\d+\.json$/);
+			expect(existsSync(join(eventsDir, result.details!.filename!))).toBe(true);
 		});
 
 		it("should create one-shot event with at parameter", async () => {
@@ -65,7 +66,7 @@ describe("Event Tools", () => {
 
 			expect(result.details?.created).toBe(true);
 
-			const content = JSON.parse(readFileSync(join(eventsDir, "test-oneshot.json"), "utf-8"));
+			const content = JSON.parse(readFileSync(join(eventsDir, result.details!.filename!), "utf-8"));
 			expect(content.type).toBe("one-shot");
 			expect(content.at).toBe(futureTime);
 		});
@@ -84,7 +85,7 @@ describe("Event Tools", () => {
 
 			expect(result.details?.created).toBe(true);
 
-			const content = JSON.parse(readFileSync(join(eventsDir, "test-periodic.json"), "utf-8"));
+			const content = JSON.parse(readFileSync(join(eventsDir, result.details!.filename!), "utf-8"));
 			expect(content.type).toBe("periodic");
 			expect(content.schedule).toBe("0 9 * * 1-5");
 			expect(content.timezone).toBe("Asia/Shanghai");
@@ -103,7 +104,7 @@ describe("Event Tools", () => {
 
 			expect(result.details?.created).toBe(true);
 
-			const content = JSON.parse(readFileSync(join(eventsDir, "test-default-tz.json"), "utf-8"));
+			const content = JSON.parse(readFileSync(join(eventsDir, result.details!.filename!), "utf-8"));
 			expect(content.timezone).toBe("Asia/Shanghai");
 		});
 
@@ -119,29 +120,37 @@ describe("Event Tools", () => {
 
 			expect(result.details?.created).toBe(true);
 
-			const content = JSON.parse(readFileSync(join(eventsDir, "test-default-channel.json"), "utf-8"));
+			const content = JSON.parse(readFileSync(join(eventsDir, result.details!.filename!), "utf-8"));
 			expect(content.channelId).toBe("default-channel");
 		});
 
-		it("should fail if event already exists", async () => {
+		it("should allow creating events with same name (different timestamps)", async () => {
 			const tool = createEventCreateTool(watcher, "default-channel");
 
-			await tool.execute("test-id", {
+			const result1 = await tool.execute("test-id", {
 				type: "immediate",
 				name: "duplicate",
 				channelId: "ch-123",
 				text: "First",
 			});
 
-			const result = await tool.execute("test-id", {
+			expect(result1.details?.created).toBe(true);
+			expect(result1.details?.filename).toMatch(/^duplicate-\d+\.json$/);
+
+			// Wait for next second to ensure different timestamp (timestamp is in seconds)
+			await new Promise((resolve) => setTimeout(resolve, 1100));
+
+			const result2 = await tool.execute("test-id", {
 				type: "immediate",
 				name: "duplicate",
 				channelId: "ch-123",
 				text: "Second",
 			});
 
-			expect(result.details?.created).toBeUndefined();
-			expect(result.details?.error).toContain("already exists");
+			// Both should succeed with different filenames
+			expect(result2.details?.created).toBe(true);
+			expect(result2.details?.filename).toMatch(/^duplicate-\d+\.json$/);
+			expect(result1.details?.filename).not.toBe(result2.details?.filename);
 		});
 
 		it("should fail for one-shot without at parameter", async () => {
@@ -222,7 +231,8 @@ describe("Event Tools", () => {
 			const result = await listTool.execute("test-id", { channelId: "ch-123" });
 
 			expect(result.details?.count).toBe(1);
-			expect(result.details?.events[0].name).toBe("event-1");
+			// Name includes timestamp, so check it starts with expected prefix
+			expect(result.details?.events[0].name).toMatch(/^event-1-\d+$/);
 		});
 
 		it("should filter by type", async () => {
@@ -247,7 +257,8 @@ describe("Event Tools", () => {
 			const result = await listTool.execute("test-id", { type: "periodic" });
 
 			expect(result.details?.count).toBe(1);
-			expect(result.details?.events[0].name).toBe("event-2");
+			// Name includes timestamp, so check it starts with expected prefix
+			expect(result.details?.events[0].name).toMatch(/^event-2-\d+$/);
 		});
 
 		it("should return empty list if no events", async () => {
@@ -267,20 +278,22 @@ describe("Event Tools", () => {
 		it("should delete existing event", async () => {
 			const createTool = createEventCreateTool(watcher, "default-channel");
 
-			await createTool.execute("test-id", {
+			const createResult = await createTool.execute("test-id", {
 				type: "immediate",
 				name: "to-delete",
 				channelId: "ch-123",
 				text: "To be deleted",
 			});
 
-			expect(existsSync(join(eventsDir, "to-delete.json"))).toBe(true);
+			const filename = createResult.details!.filename!;
+			expect(existsSync(join(eventsDir, filename))).toBe(true);
 
+			// Delete using the full filename (with timestamp)
 			const deleteTool = createEventDeleteTool(watcher);
-			const result = await deleteTool.execute("test-id", { name: "to-delete" });
+			const result = await deleteTool.execute("test-id", { name: filename.replace(/\.json$/, "") });
 
 			expect(result.details?.deleted).toBe(true);
-			expect(existsSync(join(eventsDir, "to-delete.json"))).toBe(false);
+			expect(existsSync(join(eventsDir, filename))).toBe(false);
 		});
 
 		it("should fail if event not found", async () => {

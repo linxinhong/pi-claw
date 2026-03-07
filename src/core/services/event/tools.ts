@@ -72,8 +72,8 @@ export function createEventCreateTool(watcher: EventsWatcher, defaultChannelId: 
 
 			if (result.success) {
 				return {
-					content: [{ type: "text", text: `Created ${type} event "${name}" successfully.` }],
-					details: { created: true, name, type },
+					content: [{ type: "text", text: `Created ${type} event "${result.filename}" successfully.` }],
+					details: { created: true, filename: result.filename, name, type },
 				};
 			} else {
 				return {

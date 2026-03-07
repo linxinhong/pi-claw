@@ -80,9 +80,10 @@ export async function main(options: MainOptions = {}): Promise<void> {
 	// 初始化全局 HookManager
 	const hookManager = getHookManager();
 
-	// 初始化 ConfigManager（单例模式）
+	// 初始化 ConfigManager（单例模式，传入已加载的配置避免重复加载）
 	const configManager = ConfigManager.getInstance({
 		configPath: options.configPath,
+		initialConfig: config,
 		hookManager,
 		enableWatch: true, // 启用热更新
 	});

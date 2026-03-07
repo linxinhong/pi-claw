@@ -41,6 +41,8 @@ export interface ChannelConfig {
 export interface ConfigManagerConfig {
 	/** 配置文件路径 */
 	configPath?: string;
+	/** 预加载的配置（避免重复加载） */
+	initialConfig?: AppConfig;
 	/** Hook 管理器 */
 	hookManager?: HookManager;
 	/** 是否启用文件监控 */
@@ -85,7 +87,8 @@ export class ConfigManager {
 		this.configPath = config.configPath || join(PROJECT_ROOT, "config.json");
 		this.hookManager = config.hookManager;
 		this.enableWatch = config.enableWatch ?? false;
-		this.globalConfig = loadConfig(this.configPath);
+		// 使用预加载的配置，避免重复加载
+		this.globalConfig = config.initialConfig ?? loadConfig(this.configPath);
 
 		if (this.enableWatch) {
 			this.startWatching();
