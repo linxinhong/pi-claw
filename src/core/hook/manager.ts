@@ -11,6 +11,7 @@ import type {
 	HookOptions,
 	HookResult,
 } from "./types.js";
+import { PiLogger } from "../../utils/logger/logger.js";
 
 // ============================================================================
 // Internal Types
@@ -38,6 +39,72 @@ interface HookEntry {
 export class HookManager {
 	private hooks = new Map<HookName, HookEntry[]>();
 	private idCounter = 0;
+	private logger = new PiLogger("hook");
+
+	/**
+	 * 格式化 context 为日志友好的字符串
+	 */
+	private formatContextForLog(name: HookName, context: unknown): string {
+		if (!context || typeof context !== "object") {
+			return "";
+		}
+
+		const ctx = context as Record<string, unknown>;
+		const parts: string[] = [];
+
+		// 根据 hook 类型提取关键信息
+		switch (name) {
+			case "system:startup":
+			case "system:shutdown":
+				if (ctx.version) parts.push(`version=${ctx.version}`);
+				break;
+
+			case "plugin:load":
+			case "plugin:unload":
+				if (ctx.pluginId) parts.push(`pluginId=${ctx.pluginId}`);
+				if (ctx.pluginName) parts.push(`pluginName=${ctx.pluginName}`);
+				break;
+
+			case "adapter:connect":
+			case "adapter:disconnect":
+				if (ctx.platform) parts.push(`platform=${ctx.platform}`);
+				break;
+
+			case "message:receive":
+			case "message:send":
+			case "message:sent":
+				if (ctx.channelId) parts.push(`channelId=${ctx.channelId}`);
+				if (ctx.messageId) parts.push(`messageId=${ctx.messageId}`);
+				if (ctx.userId) parts.push(`userId=${ctx.userId}`);
+				if (ctx.success !== undefined) parts.push(`success=${ctx.success}`);
+				break;
+
+			case "session:create":
+			case "session:destroy":
+				if (ctx.channelId) parts.push(`channelId=${ctx.channelId}`);
+				if (ctx.sessionId) parts.push(`sessionId=${ctx.sessionId}`);
+				break;
+
+			case "event:trigger":
+			case "event:triggered":
+				if (ctx.eventType) parts.push(`eventType=${ctx.eventType}`);
+				if (ctx.channelId) parts.push(`channelId=${ctx.channelId}`);
+				if (ctx.eventId) parts.push(`eventId=${ctx.eventId}`);
+				if (ctx.success !== undefined) parts.push(`success=${ctx.success}`);
+				if (ctx.duration !== undefined) parts.push(`duration=${ctx.duration}ms`);
+				break;
+
+			case "tool:call":
+			case "tool:called":
+				if (ctx.toolName) parts.push(`toolName=${ctx.toolName}`);
+				if (ctx.channelId) parts.push(`channelId=${ctx.channelId}`);
+				if (ctx.success !== undefined) parts.push(`success=${ctx.success}`);
+				if (ctx.duration !== undefined) parts.push(`duration=${ctx.duration}ms`);
+				break;
+		}
+
+		return parts.length > 0 ? `(${parts.join(", ")})` : "";
+	}
 
 	// ============================================================================
 	// Registration Methods
@@ -157,11 +224,17 @@ export class HookManager {
 		context: TContext
 	): Promise<HookResult<TResult>> {
 		const hooks = this.hooks.get(name);
+		const contextStr = this.formatContextForLog(name, context);
 
 		// 快速路径：无 handler 直接返回
 		if (!hooks || hooks.length === 0) {
+			this.logger.debug(`[Hook] ${name} ${contextStr} (no handlers)`);
 			return { continue: true, data: undefined as TResult };
 		}
+
+		// 记录触发日志
+		const startTime = Date.now();
+		this.logger.info(`[Hook] Triggering ${name} ${contextStr}`);
 
 		// 收集需要移除的一次性 hook
 		const toRemove: string[] = [];
@@ -209,6 +282,10 @@ export class HookManager {
 			this.off(name, id);
 		}
 
+		// 记录完成日志
+		const duration = Date.now() - startTime;
+		this.logger.info(`[Hook] ${name} completed (continue=${result.continue}, duration=${duration}ms)`);
+
 		return result;
 	}
 
@@ -223,11 +300,17 @@ export class HookManager {
 	 */
 	async emitParallel<TContext>(name: HookName, context: TContext): Promise<void> {
 		const hooks = this.hooks.get(name);
+		const contextStr = this.formatContextForLog(name, context);
 
 		// 快速路径：无 handler 直接返回
 		if (!hooks || hooks.length === 0) {
+			this.logger.debug(`[Hook] ${name} ${contextStr} (no handlers, parallel)`);
 			return;
 		}
+
+		// 记录触发日志
+		const startTime = Date.now();
+		this.logger.info(`[Hook] Triggering ${name} ${contextStr} (parallel, handlers=${hooks.length})`);
 
 		// 收集需要移除的一次性 hook
 		const toRemove: string[] = [];
@@ -243,7 +326,7 @@ export class HookManager {
 				await entry.handler(context, async () => ({ continue: true }));
 			} catch (error) {
 				// 记录错误但不中断其他 handler
-				console.error(`[HookManager] Handler error for ${name}:`, error);
+				this.logger.error(`[Hook] Handler error for ${name}`, undefined, error instanceof Error ? error : new Error(String(error)));
 			}
 		});
 
@@ -253,6 +336,10 @@ export class HookManager {
 		for (const id of toRemove) {
 			this.off(name, id);
 		}
+
+		// 记录完成日志
+		const duration = Date.now() - startTime;
+		this.logger.info(`[Hook] ${name} completed (parallel, duration=${duration}ms)`);
 	}
 
 	/**
@@ -269,11 +356,17 @@ export class HookManager {
 	 */
 	emitSync<TContext>(name: HookName, context: TContext): HookResult {
 		const hooks = this.hooks.get(name);
+		const contextStr = this.formatContextForLog(name, context);
 
 		// 快速路径：无 handler 直接返回
 		if (!hooks || hooks.length === 0) {
+			this.logger.debug(`[Hook] ${name} ${contextStr} (no handlers, sync)`);
 			return { continue: true };
 		}
+
+		// 记录触发日志
+		const startTime = Date.now();
+		this.logger.info(`[Hook] Triggering ${name} ${contextStr} (sync, handlers=${hooks.length})`);
 
 		// 收集需要移除的一次性 hook
 		const toRemove: string[] = [];
@@ -303,12 +396,14 @@ export class HookManager {
 						for (const id of toRemove) {
 							this.off(name, id);
 						}
+						const duration = Date.now() - startTime;
+						this.logger.info(`[Hook] ${name} completed (sync, continue=false, duration=${duration}ms)`);
 						return syncResult;
 					}
 				}
 			} catch (error) {
 				// 记录错误但不中断
-				console.error(`[HookManager] Sync handler error for ${name}:`, error);
+				this.logger.error(`[Hook] Sync handler error for ${name}`, undefined, error instanceof Error ? error : new Error(String(error)));
 			}
 		}
 
@@ -316,6 +411,10 @@ export class HookManager {
 		for (const id of toRemove) {
 			this.off(name, id);
 		}
+
+		// 记录完成日志
+		const duration = Date.now() - startTime;
+		this.logger.info(`[Hook] ${name} completed (sync, duration=${duration}ms)`);
 
 		return { continue: true };
 	}
