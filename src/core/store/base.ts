@@ -77,7 +77,7 @@ export abstract class BaseStore implements PlatformStore {
 		this.recentlyLogged.set(dedupeKey, Date.now());
 		setTimeout(() => this.recentlyLogged.delete(dedupeKey), 60000);
 
-		const logPath = join(this.getChannelDir(channelId), "log.jsonl");
+		const logPath = join(this.getChannelDir(channelId), "history.jsonl");
 
 		if (!message.date) {
 			const date = message.ts.includes(".")
@@ -109,7 +109,7 @@ export abstract class BaseStore implements PlatformStore {
 	 * 获取最后一条消息的时间戳
 	 */
 	getLastTimestamp(channelId: string): string | null {
-		const logPath = join(this.workspaceDir, "chats", channelId, "log.jsonl");
+		const logPath = join(this.workspaceDir, "chats", channelId, "history.jsonl");
 		if (!existsSync(logPath)) return null;
 
 		try {
