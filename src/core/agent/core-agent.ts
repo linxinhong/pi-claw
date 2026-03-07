@@ -62,6 +62,7 @@ interface AgentState {
 	modelRegistry: ModelRegistry | null;
 	memoryStore: MemoryStore | null;
 	tools: AgentTool<any>[];
+	processing: boolean;
 }
 
 /**
@@ -160,164 +161,182 @@ export class CoreAgent {
 		// 获取或创建 Agent 状态
 		let state = channelStates.get(chatId);
 		if (!state) {
-			state = { agent: null, session: null, sessionManager: null, modelRegistry: null, memoryStore: null, tools: [] };
+			state = { agent: null, session: null, sessionManager: null, modelRegistry: null, memoryStore: null, tools: [], processing: false };
 			channelStates.set(chatId, state);
 		}
 
-		// 初始化 Agent
-		if (!state.agent) {
-			await this.initializeAgent(state, chatId, channelDir, message, platformContext, additionalContext);
+		// 检查是否正在处理消息
+		if (state.processing) {
+			log.logInfo(`[Agent] Channel ${chatId} is busy, skipping message`);
+			return "_正在处理上一条消息，请稍后_";
 		}
 
-		// 更新系统提示
-		await this.updateSystemPrompt(state, chatId, channelDir, platformContext, additionalContext);
+		// 设置处理锁
+		state.processing = true;
 
-		// 准备用户消息
-		const userMessage = this.formatUserMessage(message, additionalContext);
+		try {
+			// 初始化 Agent
+			if (!state.agent) {
+				await this.initializeAgent(state, chatId, channelDir, message, platformContext, additionalContext);
+			}
 
-		// 处理图片附件
-		const imageAttachments = this.processImageAttachments(message);
+			// 更新系统提示
+			await this.updateSystemPrompt(state, chatId, channelDir, platformContext, additionalContext);
 
-		// 创建 session
-		const systemPrompt = buildSystemPrompt(
-			{
-				platform: platformContext,
-				chatId,
-				user: {
-					id: message.sender.id,
-					userName: message.sender.name,
-					displayName: message.sender.displayName || message.sender.name,
+			// 准备用户消息
+			const userMessage = this.formatUserMessage(message, additionalContext);
+
+			// 处理图片附件
+			const imageAttachments = this.processImageAttachments(message);
+
+			// 创建 session
+			const systemPrompt = buildSystemPrompt(
+				{
+					platform: platformContext,
+					chatId,
+					user: {
+						id: message.sender.id,
+						userName: message.sender.name,
+						displayName: message.sender.displayName || message.sender.name,
+					},
+					workspaceDir: this.config.workspaceDir,
+					channelDir,
+					channels: additionalContext.channels || [],
+					users: additionalContext.users || [],
+					rawText: message.content,
+					text: message.content,
+					attachments: [],
+					timestamp: message.timestamp.toISOString(),
 				},
-				workspaceDir: this.config.workspaceDir,
-				channelDir,
-				channels: additionalContext.channels || [],
-				users: additionalContext.users || [],
-				rawText: message.content,
-				text: message.content,
-				attachments: [],
-				timestamp: message.timestamp.toISOString(),
-			},
-			[],
-			"",
-		);
-		const resourceLoader = this.createResourceLoader(state.agent!, systemPrompt);
-		const sessionId = `${chatId}-${Date.now()}`;
-		const hookManager = this.config.hookManager;
+				[],
+				"",
+			);
+			const resourceLoader = this.createResourceLoader(state.agent!, systemPrompt);
+			const sessionId = `${chatId}-${Date.now()}`;
+			const hookManager = this.config.hookManager;
 
-		// 触发 SESSION_CREATE hook
-		if (hookManager?.hasHooks(HOOK_NAMES.SESSION_CREATE)) {
-			await hookManager.emit(HOOK_NAMES.SESSION_CREATE, {
-				channelId: chatId,
-				sessionId: sessionId,
-				timestamp: new Date(),
+			// 触发 SESSION_CREATE hook
+			if (hookManager?.hasHooks(HOOK_NAMES.SESSION_CREATE)) {
+				await hookManager.emit(HOOK_NAMES.SESSION_CREATE, {
+					channelId: chatId,
+					sessionId: sessionId,
+					timestamp: new Date(),
+				});
+			}
+
+			const settingsManager = SettingsManager.inMemory({
+				images: { autoResize: true },
+				retry: { enabled: true, maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 10000 },
+				theme: "dark",
+				shellPath: process.env.SHELL || "/bin/bash",
 			});
-		}
 
-		const settingsManager = SettingsManager.inMemory({
-			images: { autoResize: true },
-			retry: { enabled: true, maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 10000 },
-			theme: "dark",
-			shellPath: process.env.SHELL || "/bin/bash",
-		});
+			// 将工具数组转换为 Record 格式
+			const toolsRecord: Record<string, AgentTool> = {};
+			for (const tool of state.tools) {
+				toolsRecord[tool.name] = tool;
+			}
 
-		// 将工具数组转换为 Record 格式
-		const toolsRecord: Record<string, AgentTool> = {};
-		for (const tool of state.tools) {
-			toolsRecord[tool.name] = tool;
-		}
-
-		const session = new AgentSession({
-			agent: state.agent!,
-			sessionManager: state.sessionManager!,
-			settingsManager,
-			cwd: process.cwd(),
-			modelRegistry: state.modelRegistry!,
-			resourceLoader,
-			baseToolsOverride: toolsRecord,
-		});
-
-		// 运行状态
-		const runState: AgentRunState = {
-			totalUsage: {
-				input: 0,
-				output: 0,
-				cacheRead: 0,
-				cacheWrite: 0,
-				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-			},
-			stopReason: "stop",
-			errorMessage: undefined,
-		};
-
-		// 订阅事件并响应
-		let finalResponse = "";
-		const responsePromise = new Promise<string>((resolve) => {
-			session.subscribe(async (agentEvent) => {
-				if (agentEvent.type === "tool_execution_start") {
-					const args = agentEvent.args as Record<string, unknown>;
-					const label = (args.label as string) || agentEvent.toolName;
-					await platformContext.sendText(chatId, `_ -> ${label}_`);
-
-					// 触发 tool:call hook
-					if (hookManager?.hasHooks(HOOK_NAMES.TOOL_CALL)) {
-						await hookManager.emit(HOOK_NAMES.TOOL_CALL, {
-							toolName: agentEvent.toolName,
-							args: args,
-							channelId: chatId,
-							timestamp: new Date(),
-						});
-					}
-				} else if (agentEvent.type === "tool_execution_end") {
-					const statusIcon = agentEvent.isError ? "X" : "OK";
-					await platformContext.sendText(chatId, `_ -> ${statusIcon} ${agentEvent.toolName}_`);
-
-					// 触发 tool:called hook
-					if (hookManager?.hasHooks(HOOK_NAMES.TOOL_CALLED)) {
-						await hookManager.emit(HOOK_NAMES.TOOL_CALLED, {
-							toolName: agentEvent.toolName,
-							args: (agentEvent as any).args || {},
-							channelId: chatId,
-							timestamp: new Date(),
-							result: (agentEvent as any).result,
-							success: !agentEvent.isError,
-							error: agentEvent.isError ? String((agentEvent as any).error) : undefined,
-							duration: 0, // duration 需要从 start 事件计算，这里简化处理
-						});
-					}
-				} else if (agentEvent.type === "message_end" && agentEvent.message.role === "assistant") {
-					const assistantMsg = agentEvent.message as any;
-					if (assistantMsg.stopReason) runState.stopReason = assistantMsg.stopReason;
-					if (assistantMsg.errorMessage) {
-						runState.errorMessage = assistantMsg.errorMessage;
-						log.logError(`[Agent] API error: ${assistantMsg.errorMessage}`);
-					}
-
-					const content = agentEvent.message.content;
-					const textParts = content.filter((c: any) => c.type === "text").map((c: any) => c.text);
-					finalResponse = textParts.join("\n");
-					resolve(finalResponse);
-				}
+			const session = new AgentSession({
+				agent: state.agent!,
+				sessionManager: state.sessionManager!,
+				settingsManager,
+				cwd: process.cwd(),
+				modelRegistry: state.modelRegistry!,
+				resourceLoader,
+				baseToolsOverride: toolsRecord,
 			});
-		});
 
-		// 执行
-		await session.prompt(
-			userMessage,
-			imageAttachments.length > 0 ? { images: imageAttachments } : undefined,
-		);
+			// 运行状态
+			const runState: AgentRunState = {
+				totalUsage: {
+					input: 0,
+					output: 0,
+					cacheRead: 0,
+					cacheWrite: 0,
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+				},
+				stopReason: "stop",
+				errorMessage: undefined,
+			};
 
-		await responsePromise;
+			// 订阅事件并响应
+			let finalResponse = "";
+			const responsePromise = new Promise<string>((resolve) => {
+				session.subscribe(async (agentEvent) => {
+					try {
+						if (agentEvent.type === "tool_execution_start") {
+							const args = agentEvent.args as Record<string, unknown>;
+							const label = (args.label as string) || agentEvent.toolName;
+							await platformContext.sendText(chatId, `_ -> ${label}_`);
 
-		// 触发 SESSION_DESTROY hook
-		if (hookManager?.hasHooks(HOOK_NAMES.SESSION_DESTROY)) {
-			await hookManager.emit(HOOK_NAMES.SESSION_DESTROY, {
-				channelId: chatId,
-				sessionId: sessionId,
-				timestamp: new Date(),
+							// 触发 tool:call hook
+							if (hookManager?.hasHooks(HOOK_NAMES.TOOL_CALL)) {
+								await hookManager.emit(HOOK_NAMES.TOOL_CALL, {
+									toolName: agentEvent.toolName,
+									args: args,
+									channelId: chatId,
+									timestamp: new Date(),
+								});
+							}
+						} else if (agentEvent.type === "tool_execution_end") {
+							const statusIcon = agentEvent.isError ? "X" : "OK";
+							await platformContext.sendText(chatId, `_ -> ${statusIcon} ${agentEvent.toolName}_`);
+
+							// 触发 tool:called hook
+							if (hookManager?.hasHooks(HOOK_NAMES.TOOL_CALLED)) {
+								await hookManager.emit(HOOK_NAMES.TOOL_CALLED, {
+									toolName: agentEvent.toolName,
+									args: (agentEvent as any).args || {},
+									channelId: chatId,
+									timestamp: new Date(),
+									result: (agentEvent as any).result,
+									success: !agentEvent.isError,
+									error: agentEvent.isError ? String((agentEvent as any).error) : undefined,
+									duration: 0, // duration 需要从 start 事件计算，这里简化处理
+								});
+							}
+						} else if (agentEvent.type === "message_end" && agentEvent.message.role === "assistant") {
+							const assistantMsg = agentEvent.message as any;
+							if (assistantMsg.stopReason) runState.stopReason = assistantMsg.stopReason;
+							if (assistantMsg.errorMessage) {
+								runState.errorMessage = assistantMsg.errorMessage;
+								log.logError(`[Agent] API error: ${assistantMsg.errorMessage}`);
+							}
+
+							const content = agentEvent.message.content;
+							const textParts = content.filter((c: any) => c.type === "text").map((c: any) => c.text);
+							finalResponse = textParts.join("\n");
+							resolve(finalResponse);
+						}
+					} catch (error) {
+						log.logError(`[Agent] Event handler error: ${error}`);
+					}
+				});
 			});
-		}
 
-		return finalResponse || "_No response_";
+			// 执行
+			await session.prompt(
+				userMessage,
+				imageAttachments.length > 0 ? { images: imageAttachments } : undefined,
+			);
+
+			await responsePromise;
+
+			// 触发 SESSION_DESTROY hook
+			if (hookManager?.hasHooks(HOOK_NAMES.SESSION_DESTROY)) {
+				await hookManager.emit(HOOK_NAMES.SESSION_DESTROY, {
+					channelId: chatId,
+					sessionId: sessionId,
+					timestamp: new Date(),
+				});
+			}
+
+			return finalResponse || "_No response_";
+		} finally {
+			// 释放处理锁
+			state.processing = false;
+		}
 	}
 
 	/**
