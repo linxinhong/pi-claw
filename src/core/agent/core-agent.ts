@@ -12,6 +12,7 @@ import {
 	createExtensionRuntime,
 	ModelRegistry,
 	SessionManager,
+	SettingsManager,
 	type ResourceLoader,
 } from "@mariozechner/pi-coding-agent";
 import { readFileSync } from "fs";
@@ -210,21 +211,17 @@ export class CoreAgent {
 			});
 		}
 
+		const settingsManager = SettingsManager.inMemory({
+			images: { autoResize: true },
+			retry: { enabled: true, maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 10000 },
+			theme: "dark",
+			shellPath: process.env.SHELL || "/bin/bash",
+		});
+
 		const session = new AgentSession({
 			agent: state.agent!,
 			sessionManager: state.sessionManager!,
-			settingsManager: {
-				getImageAutoResize: () => true,
-				getTheme: () => "dark",
-				getLanguage: () => "zh",
-				getEditor: () => "none",
-				getShell: () => process.env.SHELL || "/bin/bash",
-				getShellCommandPrefix: () => "",
-				getMcpServers: () => [],
-				getMaxTurns: () => 100,
-				getAutoCompact: () => false,
-				getAutoCompactThreshold: () => 0.8,
-			} as any,
+			settingsManager,
 			cwd: process.cwd(),
 			modelRegistry: state.modelRegistry!,
 			resourceLoader,

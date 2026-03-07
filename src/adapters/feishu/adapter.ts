@@ -511,8 +511,15 @@ export class FeishuAdapter implements PlatformAdapter {
 		// 跳过 bot 消息
 		if (sender?.sender_type === "app") return;
 
-		// 解析消息
-		const userInfo = this.users.get(sender?.sender_id?.user_id || "");
+		// 解析消息 - 先尝试从缓存获取用户信息，如果没有则实时获取
+		let userInfo = this.users.get(sender?.sender_id?.user_id || "");
+
+		// 如果用户不在缓存中，尝试实时获取
+		if (!userInfo && sender?.sender_id?.user_id) {
+			const fetchedInfo = await this.fetchUserInfo(sender.sender_id.user_id);
+			if (fetchedInfo) userInfo = fetchedInfo;
+		}
+
 		const universalMessage = parseFeishuMessage(event, userInfo);
 
 		// 跳过旧消息
@@ -556,6 +563,33 @@ export class FeishuAdapter implements PlatformAdapter {
 		} catch (err) {
 			this.logger.error("Failed to fetch users", undefined, err instanceof Error ? err : new Error(String(err)));
 		}
+	}
+
+	/**
+	 * 实时获取单个用户信息
+	 * 当用户不在缓存中时使用
+	 */
+	private async fetchUserInfo(userId: string): Promise<UserInfo | null> {
+		try {
+			const result = await this.client.contact.user.get({
+				path: { user_id: userId },
+			});
+
+			if (result.code === 0 && result.data?.user) {
+				const user = result.data.user;
+				const info: UserInfo = {
+					id: user.user_id || userId,
+					userName: user.name || user.user_id || userId,
+					displayName: user.nickname || user.name || user.user_id || userId,
+				};
+				this.users.set(userId, info); // 缓存起来
+				this.logger.debug(`Fetched user info for ${userId}: ${info.displayName}`);
+				return info;
+			}
+		} catch (err) {
+			this.logger.error(`Failed to fetch user ${userId}`, undefined, err instanceof Error ? err : new Error(String(err)));
+		}
+		return null;
 	}
 
 	private async fetchChannels(): Promise<void> {
