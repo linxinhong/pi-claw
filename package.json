@@ -14,7 +14,7 @@
 	"scripts": {
 		"build": "rm -rf dist && tsc && cp -r templates dist/ && cp -r docs dist/ && cp pnpm-lock.yaml dist/ && cp -r scripts dist/ && sed 's|dist/main.js|main.js|g; s|dist/main.d.ts|main.d.ts|g; s|./dist/cli.js|./cli.js|g' package.json > dist/package.json && chmod +x dist/cli.js",
 		"start": "node dist/main.js",
-		"dev": "tsx src/main.ts",
+		"dev": "tsx watch src/main.ts",
 		"typecheck": "tsc --noEmit",
 		"init": "tsx scripts/init-workspace.ts",
 		"lock": "bash scripts/lock-config.sh lock",
