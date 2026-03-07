@@ -38,7 +38,7 @@ export class EventsWatcher {
 	constructor(config: EventsWatcherConfig) {
 		this.eventsDir = config.eventsDir;
 		this.onEvent = config.onEvent;
-		this.startTime = Date.now();
+		this.startTime = 0; // 将在 start() 中设置
 	}
 
 	/**
@@ -49,6 +49,9 @@ export class EventsWatcher {
 	}
 
 	start(): void {
+		// 设置启动时间，用于判断 immediate 事件是否为新创建的
+		this.startTime = Date.now();
+
 		if (!existsSync(this.eventsDir)) {
 			mkdirSync(this.eventsDir, { recursive: true });
 		}
