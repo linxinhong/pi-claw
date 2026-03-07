@@ -136,6 +136,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
 			sandbox: sandboxConfig,
 			port: port,
 			logging: logConfig, // 传递日志配置给工厂
+			model: config.model, // 全局默认模型（可被平台特定配置覆盖）
 			...platformConfig, // 合并平台特定配置
 		};
 
