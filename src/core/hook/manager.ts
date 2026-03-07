@@ -10,6 +10,8 @@ import type {
 	HookName,
 	HookOptions,
 	HookResult,
+	ParallelHookHandler,
+	SerialHookHandler,
 } from "./types.js";
 import { PiLogger } from "../../utils/logger/logger.js";
 
@@ -54,7 +56,8 @@ export class HookManager {
 
 		// 根据 hook 类型提取关键信息
 		switch (name) {
-			case "system:startup":
+			case "system:before-start":
+			case "system:ready":
 			case "system:shutdown":
 				if (ctx.version) parts.push(`version=${ctx.version}`);
 				break;
@@ -262,12 +265,21 @@ export class HookManager {
 
 				// 执行当前 handler
 				try {
-					return await entry.handler(context, next);
+					const result = await entry.handler(context, next);
+
+					// 将 data merge 回 context（如果 context 是对象）
+					if (result.data && typeof context === "object" && context !== null) {
+						Object.assign(context as object, result.data);
+					}
+
+					return result;
 				} catch (error) {
+					// 异常时返回错误结果（blocked 为 undefined 表示非主动拦截）
 					return {
 						continue: false,
 						error: error instanceof Error ? error : new Error(String(error)),
 						data: undefined as TResult,
+						// blocked 不设置，表示这是异常而非主动拦截
 					};
 				}
 			};
@@ -295,10 +307,15 @@ export class HookManager {
 	 * 所有 handler 并行执行，不等待前一个完成
 	 * 适用于通知类 hook，不需要拦截能力
 	 *
+	 * 注意：此方法使用 ParallelHookHandler 类型，handler 不支持 next()
+	 *
 	 * @param name Hook 名称
 	 * @param context 上下文
 	 */
-	async emitParallel<TContext>(name: HookName, context: TContext): Promise<void> {
+	async emitParallel<TContext>(
+		name: HookName,
+		context: TContext
+	): Promise<void> {
 		const hooks = this.hooks.get(name);
 		const contextStr = this.formatContextForLog(name, context);
 
@@ -322,8 +339,10 @@ export class HookManager {
 			}
 
 			try {
-				// 并行模式：不使用 next，直接执行
-				await entry.handler(context, async () => ({ continue: true }));
+				// 并行模式：直接调用 handler，不传递 next
+				// 使用类型断言将 SerialHookHandler 转换为 ParallelHookHandler 兼容形式
+				const parallelHandler = entry.handler as unknown as ParallelHookHandler<TContext>;
+				await parallelHandler(context);
 			} catch (error) {
 				// 记录错误但不中断其他 handler
 				this.logger.error(`[Hook] Handler error for ${name}`, undefined, error instanceof Error ? error : new Error(String(error)));
@@ -501,5 +520,32 @@ export function resetHookManager(): void {
 	if (globalHookManager) {
 		globalHookManager.clearAll();
 		globalHookManager = null;
+	}
+}
+
+/**
+ * 测试辅助函数：在干净的 HookManager 环境中执行测试
+ *
+ * 自动重置 HookManager 前后的状态，确保测试隔离
+ *
+ * @example
+ * ```typescript
+ * await withCleanHookManager(async () => {
+ *   const hookManager = getHookManager();
+ *   hookManager.on(HOOK_NAMES.MESSAGE_RECEIVE, async (ctx, next) => {
+ *     // 测试代码
+ *   });
+ *   // ... 运行测试
+ * });
+ * ```
+ */
+export async function withCleanHookManager<T>(
+	fn: () => Promise<T>
+): Promise<T> {
+	resetHookManager();
+	try {
+		return await fn();
+	} finally {
+		resetHookManager();
 	}
 }

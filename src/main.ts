@@ -109,9 +109,9 @@ export async function main(options: MainOptions = {}): Promise<void> {
 		throw new Error("No platform configured. Please configure at least one platform in config.json");
 	}
 
-	// 3. 触发 system:startup hook
-	if (hookManager.hasHooks(HOOK_NAMES.SYSTEM_STARTUP)) {
-		await hookManager.emit(HOOK_NAMES.SYSTEM_STARTUP, {
+	// 3. 触发 system:before-start hook（bot 创建前）
+	if (hookManager.hasHooks(HOOK_NAMES.SYSTEM_BEFORE_START)) {
+		await hookManager.emit(HOOK_NAMES.SYSTEM_BEFORE_START, {
 			timestamp: new Date(),
 			version: "1.0.0",
 			config: { workspaceDir: config.workspaceDir, port, platforms },
@@ -150,7 +150,16 @@ export async function main(options: MainOptions = {}): Promise<void> {
 
 	log.logConnected();
 
-	// 6. 注册优雅关闭处理
+	// 6. 触发 system:ready hook（所有 bot 启动后）
+	if (hookManager.hasHooks(HOOK_NAMES.SYSTEM_READY)) {
+		await hookManager.emit(HOOK_NAMES.SYSTEM_READY, {
+			timestamp: new Date(),
+			version: "1.0.0",
+			config: { workspaceDir: config.workspaceDir, port, platforms },
+		});
+	}
+
+	// 7. 注册优雅关闭处理
 	const shutdown = async () => {
 		log.logInfo("Shutting down...");
 

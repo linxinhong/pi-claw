@@ -18,6 +18,12 @@ export interface HookResult<T = unknown> {
 	data?: T;
 	/** 错误信息（可选） */
 	error?: Error;
+	/**
+	 * 是否为主动拦截
+	 * - true: handler 主动拦截请求（如权限检查失败）
+	 * - undefined: 正常完成或异常
+	 */
+	blocked?: boolean;
 }
 
 // ============================================================================
@@ -25,16 +31,37 @@ export interface HookResult<T = unknown> {
 // ============================================================================
 
 /**
- * Hook 处理函数（中间件模式）
+ * 串行模式 Hook 处理函数（中间件模式）
+ *
+ * 支持 next() 控制执行链，可以拦截或修改上下文
  *
  * @param context Hook 上下文
  * @param next 调用下一个 handler 的函数
  * @returns Hook 处理结果
  */
-export type HookHandler<TContext = unknown, TResult = void> = (
+export type SerialHookHandler<TContext = unknown, TResult = void> = (
 	context: TContext,
 	next: () => Promise<HookResult<TResult>>
 ) => Promise<HookResult<TResult>>;
+
+/**
+ * 并行模式 Hook 处理函数（事件通知模式）
+ *
+ * 不支持 next()，仅用于通知，不能拦截
+ *
+ * @param context Hook 上下文
+ */
+export type ParallelHookHandler<TContext = unknown> = (
+	context: TContext
+) => Promise<void>;
+
+/**
+ * Hook 处理函数（兼容旧代码，等同于 SerialHookHandler）
+ *
+ * @deprecated 请使用 SerialHookHandler 或 ParallelHookHandler
+ */
+export type HookHandler<TContext = unknown, TResult = void> =
+	SerialHookHandler<TContext, TResult>;
 
 // ============================================================================
 // Hook Meta
@@ -75,8 +102,13 @@ export interface HookOptions {
  */
 export const HOOK_NAMES = {
 	// 系统生命周期
-	SYSTEM_STARTUP: "system:startup",
+	SYSTEM_BEFORE_START: "system:before-start", // 启动前（bot 创建前）
+	SYSTEM_READY: "system:ready", // 启动完成（所有 bot 启动后）
 	SYSTEM_SHUTDOWN: "system:shutdown",
+
+	// 兼容旧代码：SYSTEM_STARTUP 现在等同于 SYSTEM_BEFORE_START
+	/** @deprecated 请使用 SYSTEM_BEFORE_START */
+	SYSTEM_STARTUP: "system:before-start" as const,
 
 	// 插件生命周期
 	PLUGIN_LOAD: "plugin:load",
@@ -215,7 +247,8 @@ export interface ToolCalledContext extends ToolCallContext {
  * Hook 名称到上下文类型的映射
  */
 export interface HookContextMap {
-	[HOOK_NAMES.SYSTEM_STARTUP]: SystemHookContext;
+	[HOOK_NAMES.SYSTEM_BEFORE_START]: SystemHookContext;
+	[HOOK_NAMES.SYSTEM_READY]: SystemHookContext;
 	[HOOK_NAMES.SYSTEM_SHUTDOWN]: SystemHookContext;
 	[HOOK_NAMES.PLUGIN_LOAD]: PluginHookContext;
 	[HOOK_NAMES.PLUGIN_UNLOAD]: PluginHookContext;

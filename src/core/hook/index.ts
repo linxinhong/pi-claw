@@ -8,6 +8,8 @@
 export type {
 	HookResult,
 	HookHandler,
+	SerialHookHandler,
+	ParallelHookHandler,
 	HookMeta,
 	HookOptions,
 	HookName,
@@ -28,4 +30,9 @@ export type {
 export { HOOK_NAMES } from "./types.js";
 
 // 导出管理器
-export { HookManager, getHookManager, resetHookManager } from "./manager.js";
+export {
+	HookManager,
+	getHookManager,
+	resetHookManager,
+	withCleanHookManager,
+} from "./manager.js";
