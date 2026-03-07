@@ -219,6 +219,7 @@ export class CoreAgent {
 				getLanguage: () => "zh",
 				getEditor: () => "none",
 				getShell: () => process.env.SHELL || "/bin/bash",
+				getShellCommandPrefix: () => "",
 				getMcpServers: () => [],
 				getMaxTurns: () => 100,
 				getAutoCompact: () => false,
