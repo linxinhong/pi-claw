@@ -15,7 +15,7 @@ import {
 	SettingsManager,
 	type ResourceLoader,
 } from "@mariozechner/pi-coding-agent";
-import { readFileSync } from "fs";
+import { readFileSync, statSync } from "fs";
 import { mkdir } from "fs/promises";
 import { join } from "path";
 import { getChannelDir } from "../../utils/config.js";
@@ -68,6 +68,11 @@ interface AgentState {
 	tools: AgentTool<any>[];
 	processing: boolean;
 	updateResourceLoaderPrompt: ((prompt: string) => void) | null;
+	/** 上次系统提示更新的文件修改时间 */
+	lastPromptUpdate: {
+		skillsMtime: number;
+		memoryMtime: number;
+	} | null;
 }
 
 /**
@@ -96,6 +101,97 @@ interface AgentRunState {
 // ============================================================================
 
 const channelStates = new Map<string, AgentState>();
+
+/** 工具模块预加载状态 */
+let toolsPreloaded = false;
+
+/**
+ * 预加载工具模块
+ * 避免首次消息时的动态 import 延迟
+ */
+async function preloadTools(): Promise<void> {
+	if (toolsPreloaded) return;
+
+	await Promise.all([
+		import("../tools/bash.js"),
+		import("../tools/read.js"),
+		import("../tools/write.js"),
+		import("../tools/edit.js"),
+		import("../tools/models.js"),
+		import("../tools/glob.js"),
+		import("../tools/grep.js"),
+		import("../tools/spawn.js"),
+	]);
+
+	toolsPreloaded = true;
+}
+
+/**
+ * 获取目录的修改时间（取目录内所有文件的最新 mtime）
+ */
+function getDirMtime(dir: string): number {
+	try {
+		const stats = statSync(dir);
+		return stats.mtimeMs;
+	} catch {
+		return 0;
+	}
+}
+
+/**
+ * 获取 memory 相关文件的修改时间
+ */
+function getMemoryMtime(channelDir: string, workspaceDir: string): number {
+	const paths = [
+		join(workspaceDir, "boot"),
+		join(workspaceDir, "memory", "memory.md"),
+		join(channelDir, "MEMORY.md"),
+	];
+
+	let maxMtime = 0;
+	for (const p of paths) {
+		try {
+			const stats = statSync(p);
+			maxMtime = Math.max(maxMtime, stats.mtimeMs);
+		} catch {
+			// 忽略不存在的文件
+		}
+	}
+
+	// 检查今日日志文件
+	const today = new Date().toISOString().split("T")[0];
+	const todayLogPath = join(workspaceDir, "memory", `${today}.md`);
+	try {
+		const stats = statSync(todayLogPath);
+		maxMtime = Math.max(maxMtime, stats.mtimeMs);
+	} catch {
+		// 忽略
+	}
+
+	return maxMtime;
+}
+
+/**
+ * 获取 skills 目录的修改时间
+ */
+function getSkillsMtime(channelDir: string, workspaceDir: string): number {
+	const paths = [
+		join(workspaceDir, "skills"),
+		join(channelDir, "skills"),
+	];
+
+	let maxMtime = 0;
+	for (const p of paths) {
+		try {
+			const stats = statSync(p);
+			maxMtime = Math.max(maxMtime, stats.mtimeMs);
+		} catch {
+			// 忽略不存在的目录
+		}
+	}
+
+	return maxMtime;
+}
 
 // ============================================================================
 // API Key Helper
@@ -167,7 +263,7 @@ export class CoreAgent {
 		// 获取或创建 Agent 状态
 		let state = channelStates.get(chatId);
 		if (!state) {
-			state = { agent: null, session: null, sessionManager: null, modelRegistry: null, memoryStore: null, settingsManager: null, tools: [], processing: false, updateResourceLoaderPrompt: null };
+			state = { agent: null, session: null, sessionManager: null, modelRegistry: null, memoryStore: null, settingsManager: null, tools: [], processing: false, updateResourceLoaderPrompt: null, lastPromptUpdate: null };
 			channelStates.set(chatId, state);
 		}
 
@@ -355,6 +451,9 @@ export class CoreAgent {
 			throw new Error("[Agent] Executor is required to create tools");
 		}
 
+		// 预加载工具模块（首次调用时会执行，后续跳过）
+		await preloadTools();
+
 		// 创建工具
 		const { createBashTool } = await import("../tools/bash.js");
 		const { createReadTool } = await import("../tools/read.js");
@@ -497,7 +596,7 @@ export class CoreAgent {
 	}
 
 	/**
-	 * 更新系统提示
+	 * 更新系统提示（条件性：只在文件变更时更新）
 	 */
 	private async updateSystemPrompt(
 		state: AgentState,
@@ -509,8 +608,30 @@ export class CoreAgent {
 		const workspacePath = this.config.executor.getWorkspacePath(
 			join(channelDir, "..", ".."),
 		);
+
+		// 获取当前的文件 mtime
+		const currentSkillsMtime = getSkillsMtime(channelDir, workspacePath);
+		const currentMemoryMtime = getMemoryMtime(workspacePath, channelDir);
+
+		// 检查是否需要更新（首次或文件有变更）
+		const needsUpdate = !state.lastPromptUpdate ||
+			state.lastPromptUpdate.skillsMtime !== currentSkillsMtime ||
+			state.lastPromptUpdate.memoryMtime !== currentMemoryMtime;
+
+		if (!needsUpdate) {
+			// 文件未变更，跳过更新
+			return;
+		}
+
+		// 加载 skills 和 memory（已有缓存，不会重复读取文件）
 		const skills = loadSkills(channelDir, workspacePath);
 		const memoryContent = loadMemoryContent(channelDir, workspacePath);
+
+		// 更新 mtime 记录
+		state.lastPromptUpdate = {
+			skillsMtime: currentSkillsMtime,
+			memoryMtime: currentMemoryMtime,
+		};
 
 		const context: AgentContext = {
 			platform: platformContext,
@@ -539,6 +660,12 @@ export class CoreAgent {
 		}
 
 		state.agent!.setSystemPrompt(systemPrompt);
+
+		// 更新 mtime 记录
+		state.lastPromptUpdate = {
+			skillsMtime: currentSkillsMtime,
+			memoryMtime: currentMemoryMtime,
+		};
 	}
 
 	/**

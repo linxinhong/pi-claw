@@ -4,7 +4,7 @@
  * 提示词构建器 - 为 Agent 构建系统提示词
  */
 
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, statSync } from "fs";
 import { join } from "path";
 import type { AgentContext } from "./context.js";
 import type { Skill } from "@mariozechner/pi-coding-agent";
@@ -22,6 +22,14 @@ interface MemoryFile {
 	title: string;
 }
 
+/**
+ * 缓存条目
+ */
+interface CacheEntry<T> {
+	data: T;
+	timestamp: number;
+}
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -32,6 +40,36 @@ const BOOT_FILES: MemoryFile[] = [
 	{ path: "boot/identity.md", title: "Identity Details" },
 	{ path: "boot/tools.md", title: "Tool Guidelines" },
 ];
+
+/** 缓存 TTL：30 秒 */
+const CACHE_TTL = 30000;
+
+// ============================================================================
+// Cache
+// ============================================================================
+
+const skillsCache = new Map<string, CacheEntry<Skill[]>>();
+const memoryCache = new Map<string, CacheEntry<string>>();
+
+/**
+ * 检查缓存是否有效
+ */
+function isCacheValid<T>(entry: CacheEntry<T> | undefined): entry is CacheEntry<T> {
+	if (!entry) return false;
+	return Date.now() - entry.timestamp < CACHE_TTL;
+}
+
+/**
+ * 清理过期缓存
+ */
+function cleanupCache<T>(cache: Map<string, CacheEntry<T>>): void {
+	const now = Date.now();
+	for (const [key, entry] of cache.entries()) {
+		if (now - entry.timestamp >= CACHE_TTL) {
+			cache.delete(key);
+		}
+	}
+}
 
 // ============================================================================
 // Prompt Builder
@@ -121,9 +159,18 @@ Each tool requires a "label" parameter (shown to user).
 }
 
 /**
- * 加载记忆内容
+ * 加载记忆内容（带缓存）
  */
 export function loadMemoryContent(channelDir: string, workspaceDir: string): string {
+	// 检查缓存
+	const cacheKey = `${channelDir}:${workspaceDir}`;
+	cleanupCache(memoryCache);
+	const cached = memoryCache.get(cacheKey);
+	if (cached) {
+		return cached.data;
+	}
+
+	// 加载内容
 	const parts: string[] = [];
 
 	// 加载引导文件
@@ -173,13 +220,26 @@ export function loadMemoryContent(channelDir: string, workspaceDir: string): str
 		}
 	}
 
-	return parts.length === 0 ? "" : parts.join("\n\n");
+	const result = parts.length === 0 ? "" : parts.join("\n\n");
+
+	// 保存到缓存
+	memoryCache.set(cacheKey, { data: result, timestamp: Date.now() });
+
+	return result;
 }
 
 /**
- * 加载技能
+ * 加载技能（带缓存）
  */
 export function loadSkills(channelDir: string, workspacePath: string): Skill[] {
+	// 检查缓存
+	const cacheKey = `${channelDir}:${workspacePath}`;
+	cleanupCache(skillsCache);
+	const cached = skillsCache.get(cacheKey);
+	if (cached) {
+		return cached.data;
+	}
+
 	const skillMap = new Map<string, Skill>();
 
 	const translatePath = (hostPath: string): string => {
@@ -205,5 +265,10 @@ export function loadSkills(channelDir: string, workspacePath: string): Skill[] {
 		skillMap.set(skill.name, skill);
 	}
 
-	return Array.from(skillMap.values());
+	const result = Array.from(skillMap.values());
+
+	// 保存到缓存
+	skillsCache.set(cacheKey, { data: result, timestamp: Date.now() });
+
+	return result;
 }
