@@ -339,12 +339,25 @@ export class FeishuAdapter implements PlatformAdapter {
 			});
 		}
 
+		// 检测是否已经是飞书卡片格式，避免双重包装
+		let content: string;
+		try {
+			const parsed = JSON.parse(text);
+			if (parsed.schema === "2.0" && parsed.body) {
+				content = text;
+			} else {
+				content = this.buildTextCard(text);
+			}
+		} catch {
+			content = this.buildTextCard(text);
+		}
+
 		const result = await this.client.im.message.create({
 			params: { receive_id_type: "chat_id" },
 			data: {
 				receive_id: channel,
 				msg_type: "interactive",
-				content: this.buildTextCard(text),
+				content,
 			},
 		});
 
