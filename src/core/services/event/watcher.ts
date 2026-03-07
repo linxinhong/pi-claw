@@ -5,7 +5,7 @@
  */
 
 import { Cron } from "croner";
-import { existsSync, mkdirSync, readdirSync, unlinkSync, watch, type FSWatcher, statSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, unlinkSync, watch, writeFileSync, type FSWatcher, statSync } from "fs";
 import { readFile } from "fs/promises";
 import { join } from "path";
 import * as log from "../../../utils/logger/index.js";
@@ -297,5 +297,106 @@ export class EventsWatcher {
 			unlinkSync(join(this.eventsDir, filename));
 		} catch {}
 		this.knownFiles.delete(filename);
+	}
+
+	// ============================================================================
+	// Public API for Tools
+	// ============================================================================
+
+	/**
+	 * 获取 events 目录路径
+	 */
+	getEventsDir(): string {
+		return this.eventsDir;
+	}
+
+	/**
+	 * 创建事件
+	 * @param name 事件名称（不含 .json 后缀）
+	 * @param event 事件数据
+	 */
+	createEvent(name: string, event: ScheduledEvent): { success: boolean; error?: string } {
+		try {
+			// 确保目录存在
+			if (!existsSync(this.eventsDir)) {
+				mkdirSync(this.eventsDir, { recursive: true });
+			}
+
+			const filename = name.endsWith(".json") ? name : `${name}.json`;
+			const filePath = join(this.eventsDir, filename);
+
+			// 检查是否已存在
+			if (existsSync(filePath)) {
+				return { success: false, error: `Event "${name}" already exists` };
+			}
+
+			// 写入文件
+			writeFileSync(filePath, JSON.stringify(event, null, 2), "utf-8");
+
+			return { success: true };
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			return { success: false, error: message };
+		}
+	}
+
+	/**
+	 * 列出事件
+	 * @param channelId 可选的频道 ID 过滤
+	 * @param type 可选的事件类型过滤
+	 */
+	listEvents(channelId?: string, type?: ScheduledEvent["type"]): Array<{ name: string; event: ScheduledEvent }> {
+		const results: Array<{ name: string; event: ScheduledEvent }> = [];
+
+		try {
+			const files = readdirSync(this.eventsDir).filter((f) => f.endsWith(".json"));
+
+			for (const filename of files) {
+				try {
+					const content = require("fs").readFileSync(join(this.eventsDir, filename), "utf-8");
+					const event = this.parseEvent(content, filename);
+
+					if (!event) continue;
+
+					// 过滤
+					if (channelId && event.channelId !== channelId) continue;
+					if (type && event.type !== type) continue;
+
+					results.push({
+						name: filename.replace(/\.json$/, ""),
+						event,
+					});
+				} catch {
+					// 忽略解析错误
+				}
+			}
+		} catch {
+			// 目录不存在
+		}
+
+		return results;
+	}
+
+	/**
+	 * 删除事件
+	 * @param name 事件名称（不含 .json 后缀）
+	 */
+	deleteEvent(name: string): { success: boolean; error?: string } {
+		try {
+			const filename = name.endsWith(".json") ? name : `${name}.json`;
+			const filePath = join(this.eventsDir, filename);
+
+			if (!existsSync(filePath)) {
+				return { success: false, error: `Event "${name}" not found` };
+			}
+
+			unlinkSync(filePath);
+			this.knownFiles.delete(filename);
+
+			return { success: true };
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			return { success: false, error: message };
+		}
 	}
 }

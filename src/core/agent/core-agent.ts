@@ -27,6 +27,8 @@ import type { UniversalMessage } from "../platform/message.js";
 import * as log from "../../utils/logger/index.js";
 import type { Executor } from "../sandbox/index.js";
 import { MemoryStore, getAllMemoryTools } from "../services/memory/index.js";
+import { getAllEventTools } from "../services/event/index.js";
+import type { EventsWatcher } from "../services/event/watcher.js";
 import type { HookManager } from "../hook/manager.js";
 import { HOOK_NAMES } from "../hook/index.js";
 import type { ConfigManager } from "../config/manager.js";
@@ -53,6 +55,8 @@ export interface AgentConfig {
 	hookManager?: HookManager;
 	/** adapter 级别默认模型 */
 	adapterDefaultModel?: string;
+	/** 事件监控器 */
+	eventsWatcher?: EventsWatcher;
 }
 
 /**
@@ -483,6 +487,8 @@ export class CoreAgent {
 			}),
 			// 添加 memory 工具
 			...getAllMemoryTools(state.memoryStore, workspacePath),
+			// 添加 event 工具（如果 eventsWatcher 可用）
+			...(this.config.eventsWatcher ? getAllEventTools(this.config.eventsWatcher, chatId) : []),
 		].filter(Boolean);
 
 		// 验证工具不为空

@@ -13,3 +13,4 @@ export type {
 	ScheduledEvent,
 } from "./types.js";
 export type { EventsWatcherConfig } from "./watcher.js";
+export { createEventCreateTool, createEventListTool, createEventDeleteTool, getAllEventTools } from "./tools.js";

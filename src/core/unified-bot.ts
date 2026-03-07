@@ -81,6 +81,15 @@ export class UnifiedBot {
 		// 获取 adapter 默认模型
 		const adapterDefaultModel = this.adapter.getDefaultModel?.();
 
+		// 创建 EventsWatcher（需要在 CoreAgent 之前创建）
+		const eventsDir = join(this.workingDir, "events");
+		this.eventsWatcher = new EventsWatcher({
+			eventsDir,
+			onEvent: async (channelId, text) => {
+				await this.handleScheduledEvent(channelId, text);
+			},
+		});
+
 		// 创建核心 Agent
 		this.coreAgent = createCoreAgent({
 			modelManager: this.modelManager,
@@ -90,6 +99,7 @@ export class UnifiedBot {
 			eventBus: null, // 可以传入 EventBus
 			adapterDefaultModel,
 			hookManager: getHookManager(),
+			eventsWatcher: this.eventsWatcher,
 		});
 
 		// 设置模型变更回调：当模型切换时销毁 Agent 状态
@@ -106,15 +116,10 @@ export class UnifiedBot {
 	async start(port?: number): Promise<void> {
 		await this.adapter.start();
 
-		// 启动事件监控
-		const eventsDir = join(this.workingDir, "events");
-		this.eventsWatcher = new EventsWatcher({
-			eventsDir,
-			onEvent: async (channelId, text) => {
-				await this.handleScheduledEvent(channelId, text);
-			},
-		});
-		this.eventsWatcher.start();
+		// 启动事件监控（已在构造函数中创建）
+		if (this.eventsWatcher) {
+			this.eventsWatcher.start();
+		}
 
 		console.log(`[UnifiedBot] Started on ${this.adapter.platform} platform`);
 	}
