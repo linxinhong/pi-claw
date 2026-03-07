@@ -29,6 +29,7 @@ import type { Executor } from "../sandbox/index.js";
 import { MemoryStore, getAllMemoryTools } from "../services/memory/index.js";
 import type { HookManager } from "../hook/manager.js";
 import { HOOK_NAMES } from "../hook/index.js";
+import type { ConfigManager } from "../config/manager.js";
 
 // ============================================================================
 // Types
@@ -40,6 +41,8 @@ import { HOOK_NAMES } from "../hook/index.js";
 export interface AgentConfig {
 	/** 模型管理器 */
 	modelManager: ModelManager;
+	/** 配置管理器 */
+	configManager?: ConfigManager;
 	/** 沙箱执行器 */
 	executor: Executor;
 	/** 工作目录 */
@@ -61,8 +64,10 @@ interface AgentState {
 	sessionManager: SessionManager | null;
 	modelRegistry: ModelRegistry | null;
 	memoryStore: MemoryStore | null;
+	settingsManager: SettingsManager | null;
 	tools: AgentTool<any>[];
 	processing: boolean;
+	updateResourceLoaderPrompt: ((prompt: string) => void) | null;
 }
 
 /**
@@ -142,14 +147,27 @@ export class CoreAgent {
 		// 确保目录存在
 		await mkdir(channelDir, { recursive: true });
 
-		// 加载频道模型配置
-		const modelConfigPath = join(channelDir, "channel-config.json");
-		this.config.modelManager.loadChannelModels(modelConfigPath);
+		// 使用 ConfigManager 加载频道配置
+		const configManager = this.config.configManager;
+		if (configManager) {
+			// 加载并监控频道配置
+			configManager.watchChannelConfig(chatId);
+			const channelConfig = configManager.getChannelConfig(chatId);
+
+			// 应用模型配置
+			if (channelConfig.model) {
+				this.config.modelManager.switchChannelModel(chatId, channelConfig.model);
+			}
+		} else {
+			// 回退到旧的加载方式
+			const modelConfigPath = join(channelDir, "channel-config.json");
+			this.config.modelManager.loadChannelModels(modelConfigPath);
+		}
 
 		// 获取或创建 Agent 状态
 		let state = channelStates.get(chatId);
 		if (!state) {
-			state = { agent: null, session: null, sessionManager: null, modelRegistry: null, memoryStore: null, tools: [], processing: false };
+			state = { agent: null, session: null, sessionManager: null, modelRegistry: null, memoryStore: null, settingsManager: null, tools: [], processing: false, updateResourceLoaderPrompt: null };
 			channelStates.set(chatId, state);
 		}
 
@@ -177,43 +195,12 @@ export class CoreAgent {
 			// 处理图片附件
 			const imageAttachments = this.processImageAttachments(message);
 
-			// 创建 session
-			const systemPrompt = buildSystemPrompt(
-				{
-					platform: platformContext,
-					chatId,
-					user: {
-						id: message.sender.id,
-						userName: message.sender.name,
-						displayName: message.sender.displayName || message.sender.name,
-					},
-					workspaceDir: this.config.workspaceDir,
-					channelDir,
-					channels: additionalContext.channels || [],
-					users: additionalContext.users || [],
-					rawText: message.content,
-					text: message.content,
-					attachments: [],
-					timestamp: message.timestamp.toISOString(),
-				},
-				[],
-				"",
-			);
-
-			// 触发 SYSTEM_PROMPT_BUILD hook
-			const hookManager = this.config.hookManager;
-			if (hookManager?.hasHooks(HOOK_NAMES.SYSTEM_PROMPT_BUILD)) {
-				await hookManager.emit(HOOK_NAMES.SYSTEM_PROMPT_BUILD, {
-					channelId: chatId,
-					prompt: systemPrompt,
-					timestamp: new Date(),
-				});
-			}
-
-			const resourceLoader = this.createResourceLoader(state.agent!, systemPrompt);
+			// 复用已有的 session
+			const session = state.session!;
 			const sessionId = `${chatId}-${Date.now()}`;
 
 			// 触发 SESSION_CREATE hook
+			const hookManager = this.config.hookManager;
 			if (hookManager?.hasHooks(HOOK_NAMES.SESSION_CREATE)) {
 				await hookManager.emit(HOOK_NAMES.SESSION_CREATE, {
 					channelId: chatId,
@@ -221,29 +208,6 @@ export class CoreAgent {
 					timestamp: new Date(),
 				});
 			}
-
-			const settingsManager = SettingsManager.inMemory({
-				images: { autoResize: true },
-				retry: { enabled: true, maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 10000 },
-				theme: "dark",
-				shellPath: process.env.SHELL || "/bin/bash",
-			});
-
-			// 将工具数组转换为 Record 格式
-			const toolsRecord: Record<string, AgentTool> = {};
-			for (const tool of state.tools) {
-				toolsRecord[tool.name] = tool;
-			}
-
-			const session = new AgentSession({
-				agent: state.agent!,
-				sessionManager: state.sessionManager!,
-				settingsManager,
-				cwd: process.cwd(),
-				modelRegistry: state.modelRegistry!,
-				resourceLoader,
-				baseToolsOverride: toolsRecord,
-			});
 
 			// 运行状态
 			const runState: AgentRunState = {
@@ -483,6 +447,37 @@ export class CoreAgent {
 			getApiKey: async () => getApiKeyForModel(model, state.modelRegistry!),
 		});
 
+		// 创建 SettingsManager（只创建一次）
+		state.settingsManager = SettingsManager.inMemory({
+			images: { autoResize: true },
+			retry: { enabled: true, maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 10000 },
+			theme: "dark",
+			shellPath: process.env.SHELL || "/bin/bash",
+		});
+
+		// 创建可更新的 resourceLoader
+		const { loader: resourceLoader, updateSystemPrompt } = this.createResourceLoader();
+		state.updateResourceLoaderPrompt = updateSystemPrompt;
+		// 初始化 resourceLoader 的 system prompt
+		updateSystemPrompt(systemPrompt);
+
+		// 将工具转换为 Record 格式
+		const toolsRecord: Record<string, AgentTool> = {};
+		for (const tool of state.tools) {
+			toolsRecord[tool.name] = tool;
+		}
+
+		// 创建并保存 AgentSession
+		state.session = new AgentSession({
+			agent: state.agent,
+			sessionManager: state.sessionManager!,
+			settingsManager: state.settingsManager,
+			cwd: process.cwd(),
+			modelRegistry: state.modelRegistry!,
+			resourceLoader,
+			baseToolsOverride: toolsRecord,
+		});
+
 		// 加载历史消息
 		const loadedSession = state.sessionManager.buildSessionContext();
 		if (loadedSession.messages.length > 0) {
@@ -609,20 +604,26 @@ export class CoreAgent {
 	}
 
 	/**
-	 * 创建资源加载器
+	 * 创建可更新的资源加载器
 	 */
-	private createResourceLoader(agent: Agent, systemPrompt: string): ResourceLoader {
+	private createResourceLoader(): { loader: ResourceLoader; updateSystemPrompt: (prompt: string) => void } {
+		let currentSystemPrompt = "";
 		return {
-			getExtensions: () => ({ extensions: [], errors: [], runtime: createExtensionRuntime() }),
-			getSkills: () => ({ skills: [], diagnostics: [] }),
-			getPrompts: () => ({ prompts: [], diagnostics: [] }),
-			getThemes: () => ({ themes: [], diagnostics: [] }),
-			getAgentsFiles: () => ({ agentsFiles: [] }),
-			getSystemPrompt: () => systemPrompt,
-			getAppendSystemPrompt: () => [],
-			getPathMetadata: () => new Map(),
-			extendResources: () => {},
-			reload: async () => {},
+			loader: {
+				getExtensions: () => ({ extensions: [], errors: [], runtime: createExtensionRuntime() }),
+				getSkills: () => ({ skills: [], diagnostics: [] }),
+				getPrompts: () => ({ prompts: [], diagnostics: [] }),
+				getThemes: () => ({ themes: [], diagnostics: [] }),
+				getAgentsFiles: () => ({ agentsFiles: [] }),
+				getSystemPrompt: () => currentSystemPrompt,
+				getAppendSystemPrompt: () => [],
+				getPathMetadata: () => new Map(),
+				extendResources: () => {},
+				reload: async () => {},
+			},
+			updateSystemPrompt: (prompt: string) => {
+				currentSystemPrompt = prompt;
+			},
 		};
 	}
 
