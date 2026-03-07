@@ -8,11 +8,13 @@
 import type { PlatformAdapter } from "./platform/adapter.js";
 import type { PluginManager } from "./plugin/manager.js";
 import type { PlatformStore } from "./store/types.js";
+import type { LogContext } from "../utils/logger/console.js";
 import { CoreAgent, createCoreAgent } from "./agent/index.js";
 import { ModelManager } from "./model/index.js";
 import { createExecutor } from "./sandbox/index.js";
 import { EventsWatcher } from "./services/event/index.js";
 import { getHookManager, HOOK_NAMES } from "./hook/index.js";
+import { logMessageReceive, logMessageReply } from "../utils/logger/console.js";
 import { join } from "path";
 
 // ============================================================================
@@ -102,6 +104,21 @@ export class UnifiedBot {
 	}
 
 	private async handleMessage(message: any): Promise<void> {
+		const startTime = Date.now();
+		const chatId = message.chat.id;
+
+		// 获取上下文信息
+		const channelInfo = await this.adapter.getChannelInfo(chatId);
+		const ctx: LogContext = {
+			channelId: chatId,
+			channelName: channelInfo?.name,
+			userName: message.sender?.name,
+			platform: this.adapter.platform,
+		};
+
+		// 记录消息接收
+		logMessageReceive(ctx, message.content, message.id);
+
 		// 触发 MESSAGE_RECEIVE hook
 		const hookManager = getHookManager();
 		if (hookManager.hasHooks(HOOK_NAMES.MESSAGE_RECEIVE)) {
@@ -128,6 +145,10 @@ export class UnifiedBot {
 		// 发送响应
 		if (response) {
 			await platformContext.sendText(message.chat.id, response);
+
+			// 记录回复
+			const duration = Date.now() - startTime;
+			logMessageReply(ctx, response.length, duration);
 		}
 	}
 

@@ -6,10 +6,11 @@
 
 import type { Logger } from "./index.js";
 
-interface LogContext {
+export interface LogContext {
 	channelId: string;
 	userName?: string;
 	channelName?: string;
+	platform?: string; // adapter 名称，如 "feishu"
 }
 
 interface UsageSummary {
@@ -160,4 +161,23 @@ export function logUsageSummary(ctx: LogContext, usage: UsageSummary, contextTok
 
 export function logConnected(): void {
 	console.log(`${color.dim}${timestamp()}${color.reset} ${color.green}✓${color.reset} Connected to Feishu`);
+}
+
+export function logMessageReceive(ctx: LogContext, content: string, messageId: string): void {
+	const channelInfo = ctx.channelName ? `#${ctx.channelName}` : ctx.channelId;
+	const platformTag = ctx.platform ? `[${ctx.platform}]` : "";
+	const userInfo = ctx.userName || "unknown";
+	const truncated = content.length > 100 ? content.substring(0, 100) + "..." : content;
+	console.log(
+		`${color.dim}${timestamp()}${color.reset} ${color.magenta}${platformTag}${color.reset} ${color.cyan}${channelInfo}${color.reset} ${color.green}RECV${color.reset} [${userInfo}]: ${truncated}`,
+	);
+}
+
+export function logMessageReply(ctx: LogContext, contentLength: number, durationMs: number): void {
+	const channelInfo = ctx.channelName ? `#${ctx.channelName}` : ctx.channelId;
+	const platformTag = ctx.platform ? `[${ctx.platform}]` : "";
+	const duration = (durationMs / 1000).toFixed(1);
+	console.log(
+		`${color.dim}${timestamp()}${color.reset} ${color.magenta}${platformTag}${color.reset} ${color.cyan}${channelInfo}${color.reset} ${color.blue}REPLY${color.reset} ${contentLength} chars (${duration}s)`,
+	);
 }
