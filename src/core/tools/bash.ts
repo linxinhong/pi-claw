@@ -9,7 +9,8 @@ import type { Executor } from "../sandbox/index.js";
 const BashToolSchema = Type.Object({
 	command: Type.String({ description: "The shell command to run" }),
 	label: Type.String({ description: "Short label shown to user" }),
-	timeout: Type.Optional(Type.Number({ description: "Timeout in seconds (default: 120)" })),
+	timeout: Type.Optional(Type.Number({ description: "Timeout in milliseconds (default: 30000)" })),
+	cwd: Type.Optional(Type.String({ description: "Working directory for the command (default: workspace root)" })),
 });
 
 type BashToolParams = Static<typeof BashToolSchema>;
@@ -21,9 +22,11 @@ export function createBashTool(executor: Executor): AgentTool<typeof BashToolSch
 		description: "Run a shell command. Use for file operations, system commands, etc.",
 		parameters: BashToolSchema,
 		execute: async (_toolCallId, params: BashToolParams, _signal, _onUpdate) => {
-			const { command, timeout = 120 } = params;
+			const { command, timeout = 30000, cwd } = params;
 			try {
-				const result = await executor.exec(command, { timeout });
+				// 如果指定了 cwd，使用 cd 切换目录后执行命令
+				const fullCommand = cwd ? `cd "${cwd}" && ${command}` : command;
+				const result = await executor.exec(fullCommand, { timeout });
 
 				let output = "";
 				if (result.stdout) output += result.stdout;

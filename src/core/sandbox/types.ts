@@ -19,6 +19,7 @@ export interface Executor {
 }
 
 export interface ExecOptions {
+	/** Timeout in milliseconds (default: no timeout) */
 	timeout?: number;
 	signal?: AbortSignal;
 }

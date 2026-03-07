@@ -38,7 +38,7 @@ class HostExecutor implements Executor {
 					? setTimeout(() => {
 							timedOut = true;
 							killProcessTree(child.pid!);
-						}, options.timeout * 1000)
+						}, options.timeout)
 					: undefined;
 
 			const onAbort = () => {
@@ -79,7 +79,7 @@ class HostExecutor implements Executor {
 				}
 
 				if (timedOut) {
-					reject(new Error(`${stdout}\n${stderr}\nCommand timed out after ${options?.timeout} seconds`.trim()));
+					reject(new Error(`${stdout}\n${stderr}\nCommand timed out after ${options?.timeout}ms`.trim()));
 					return;
 				}
 
