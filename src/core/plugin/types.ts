@@ -5,6 +5,7 @@
  */
 
 import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { Logger, LogContext } from "../../utils/logger/index.js";
 
 // ============================================================================
 // Plugin Metadata
@@ -224,6 +225,10 @@ export interface PluginContext {
 
 	// ========== 平台能力扩展 ==========
 	capabilities: PlatformCapabilities;
+
+	// ========== 日志器 ==========
+	/** 日志器 */
+	logger?: Logger;
 }
 
 /**
@@ -234,10 +239,14 @@ export interface PluginInitContext {
 	workspaceDir: string;
 	/** 插件配置 */
 	config: PluginConfig;
-	/** 日志函数 */
+	/** 日志函数（兼容旧版本） */
 	log: (level: "info" | "warning" | "error", message: string, ...args: unknown[]) => void;
+	/** 日志器（推荐使用） */
+	logger?: Logger;
 	/** Sandbox 配置 */
 	sandboxConfig?: { type: "host" } | { type: "docker"; container: string };
+	/** Hook 管理器 */
+	hookManager?: import("../hook/manager.js").HookManager;
 }
 
 // ============================================================================
@@ -297,6 +306,8 @@ export interface Plugin {
 export interface PluginManagerConfig {
 	workspaceDir: string;
 	pluginsConfig: PluginsConfig;
+	/** 日志器 */
+	logger?: Logger;
 }
 
 // ============================================================================

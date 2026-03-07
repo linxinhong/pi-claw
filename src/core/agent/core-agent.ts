@@ -23,9 +23,11 @@ import { buildSystemPrompt, loadMemoryContent, loadSkills } from "./prompt-build
 import type { ModelManager } from "../model/manager.js";
 import type { PlatformContext } from "../platform/context.js";
 import type { UniversalMessage } from "../platform/message.js";
-import * as log from "../../utils/log.js";
+import * as log from "../../utils/logger/index.js";
 import type { Executor } from "../sandbox/index.js";
 import { MemoryStore, getAllMemoryTools } from "../services/memory/index.js";
+import type { HookManager } from "../hook/manager.js";
+import { HOOK_NAMES } from "../hook/index.js";
 
 // ============================================================================
 // Types
@@ -43,6 +45,8 @@ export interface AgentConfig {
 	workspaceDir: string;
 	/** 事件总线 */
 	eventBus?: any;
+	/** Hook 管理器 */
+	hookManager?: HookManager;
 }
 
 /**
@@ -231,15 +235,40 @@ export class CoreAgent {
 
 		// 订阅事件并响应
 		let finalResponse = "";
+		const hookManager = this.config.hookManager;
 		const responsePromise = new Promise<string>((resolve) => {
 			session.subscribe(async (agentEvent) => {
 				if (agentEvent.type === "tool_execution_start") {
-					const args = agentEvent.args as { label?: string };
-					const label = args.label || agentEvent.toolName;
+					const args = agentEvent.args as Record<string, unknown>;
+					const label = (args.label as string) || agentEvent.toolName;
 					await platformContext.sendText(chatId, `_ -> ${label}_`);
+
+					// 触发 tool:call hook
+					if (hookManager?.hasHooks(HOOK_NAMES.TOOL_CALL)) {
+						await hookManager.emit(HOOK_NAMES.TOOL_CALL, {
+							toolName: agentEvent.toolName,
+							args: args,
+							channelId: chatId,
+							timestamp: new Date(),
+						});
+					}
 				} else if (agentEvent.type === "tool_execution_end") {
 					const statusIcon = agentEvent.isError ? "X" : "OK";
 					await platformContext.sendText(chatId, `_ -> ${statusIcon} ${agentEvent.toolName}_`);
+
+					// 触发 tool:called hook
+					if (hookManager?.hasHooks(HOOK_NAMES.TOOL_CALLED)) {
+						await hookManager.emit(HOOK_NAMES.TOOL_CALLED, {
+							toolName: agentEvent.toolName,
+							args: (agentEvent as any).args || {},
+							channelId: chatId,
+							timestamp: new Date(),
+							result: (agentEvent as any).result,
+							success: !agentEvent.isError,
+							error: agentEvent.isError ? String((agentEvent as any).error) : undefined,
+							duration: 0, // duration 需要从 start 事件计算，这里简化处理
+						});
+					}
 				} else if (agentEvent.type === "message_end" && agentEvent.message.role === "assistant") {
 					const assistantMsg = agentEvent.message as any;
 					if (assistantMsg.stopReason) runState.stopReason = assistantMsg.stopReason;

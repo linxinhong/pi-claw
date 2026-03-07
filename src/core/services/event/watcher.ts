@@ -8,8 +8,10 @@ import { Cron } from "croner";
 import { existsSync, mkdirSync, readdirSync, unlinkSync, watch, type FSWatcher, statSync } from "fs";
 import { readFile } from "fs/promises";
 import { join } from "path";
-import * as log from "../../../utils/log.js";
+import * as log from "../../../utils/logger/index.js";
 import type { EventCallback, ScheduledEvent } from "./types.js";
+import type { HookManager } from "../../hook/manager.js";
+import { HOOK_NAMES } from "../../hook/index.js";
 
 /**
  * 事件监控器配置
@@ -31,11 +33,19 @@ export class EventsWatcher {
 	private knownFiles = new Set<string>();
 	private eventsDir: string;
 	private onEvent: EventCallback;
+	private hookManager: HookManager | null = null;
 
 	constructor(config: EventsWatcherConfig) {
 		this.eventsDir = config.eventsDir;
 		this.onEvent = config.onEvent;
 		this.startTime = Date.now();
+	}
+
+	/**
+	 * 设置 HookManager
+	 */
+	setHookManager(hookManager: HookManager): void {
+		this.hookManager = hookManager;
 	}
 
 	start(): void {
@@ -233,8 +243,49 @@ export class EventsWatcher {
 		}
 	}
 
-	private execute(filename: string, event: ScheduledEvent, deleteAfter = true): void {
-		this.onEvent(event.channelId, event.text);
+	private async execute(filename: string, event: ScheduledEvent, deleteAfter = true): Promise<void> {
+		const startTime = Date.now();
+
+		// 构建 hook 上下文
+		const hookContext = {
+			eventType: event.type,
+			channelId: event.channelId,
+			text: event.text,
+			eventId: event.type === "one-shot" || event.type === "periodic" ? filename : undefined,
+			timestamp: new Date(),
+		};
+
+		// 触发 event:trigger hook（可拦截）
+		if (this.hookManager?.hasHooks(HOOK_NAMES.EVENT_TRIGGER)) {
+			const result = await this.hookManager.emit(HOOK_NAMES.EVENT_TRIGGER, hookContext);
+			if (!result.continue) {
+				log.logInfo(`[EventsWatcher] Event blocked by hook: ${filename}`);
+				if (deleteAfter) {
+					this.deleteFile(filename);
+				}
+				return;
+			}
+		}
+
+		// 执行事件回调
+		let success = true;
+		let error: string | undefined;
+		try {
+			this.onEvent(event.channelId, event.text);
+		} catch (e) {
+			success = false;
+			error = e instanceof Error ? e.message : String(e);
+		}
+
+		// 触发 event:triggered hook（通知）
+		if (this.hookManager?.hasHooks(HOOK_NAMES.EVENT_TRIGGERED)) {
+			await this.hookManager.emit(HOOK_NAMES.EVENT_TRIGGERED, {
+				...hookContext,
+				success,
+				error,
+				duration: Date.now() - startTime,
+			});
+		}
 
 		if (deleteAfter) {
 			this.deleteFile(filename);

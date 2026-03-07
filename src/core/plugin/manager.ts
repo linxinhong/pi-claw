@@ -16,6 +16,10 @@ import type {
 	PluginsConfig,
 	MessageEvent,
 } from "./types.js";
+import type { Logger } from "../../utils/logger/index.js";
+import type { HookManager } from "../hook/manager.js";
+import { PiLogger } from "../../utils/logger/index.js";
+import { HOOK_NAMES } from "../hook/index.js";
 
 // ============================================================================
 // Event Bus (Internal)
@@ -128,11 +132,21 @@ export class PluginManager {
 	private eventBus: EventBus;
 	private initialized = false;
 	private currentPlatform: string = "unknown";
+	private logger: Logger;
+	private hookManager: HookManager | null = null;
 
 	constructor(config: PluginManagerConfig) {
 		this.workspaceDir = config.workspaceDir;
 		this.pluginConfigs = config.pluginsConfig;
 		this.eventBus = getEventBus();
+		this.logger = config.logger || new PiLogger("plugin");
+	}
+
+	/**
+	 * 设置 HookManager
+	 */
+	setHookManager(hookManager: HookManager): void {
+		this.hookManager = hookManager;
 	}
 
 	/**
@@ -148,10 +162,10 @@ export class PluginManager {
 	 */
 	register(plugin: Plugin): void {
 		if (this.plugins.has(plugin.meta.id)) {
-			console.warn(`[PluginManager] Plugin ${plugin.meta.id} already registered, replacing`);
+			this.logger.warn(`Plugin ${plugin.meta.id} already registered, replacing`);
 		}
 		this.plugins.set(plugin.meta.id, plugin);
-		console.log(`[PluginManager] Registered plugin: ${plugin.meta.name} v${plugin.meta.version}`);
+		this.logger.info(`Registered plugin: ${plugin.meta.name} v${plugin.meta.version}`);
 	}
 
 	/**
@@ -171,7 +185,7 @@ export class PluginManager {
 		platform?: string;
 	}): Promise<void> {
 		if (this.initialized) {
-			console.warn("[PluginManager] Already initialized");
+			this.logger.warn("PluginManager already initialized");
 			return;
 		}
 
@@ -183,10 +197,17 @@ export class PluginManager {
 		const initContext: Omit<PluginInitContext, "config"> = {
 			workspaceDir: this.workspaceDir,
 			log: (level, message, ...args) => {
-				const logFn = level === "error" ? console.error : level === "warning" ? console.warn : console.log;
-				logFn(`[Plugin] ${message}`, ...args);
+				if (level === "error") {
+					this.logger.error(message, undefined, args.length > 0 ? new Error(String(args[0])) : undefined);
+				} else if (level === "warning") {
+					this.logger.warn(message, { args });
+				} else {
+					this.logger.info(message, { args });
+				}
 			},
+			logger: this.logger,
 			sandboxConfig: initOptions?.sandboxConfig,
+			hookManager: this.hookManager || undefined,
 		};
 
 		// 检查依赖和平台兼容性
@@ -197,8 +218,8 @@ export class PluginManager {
 			// 检查平台兼容性
 			if (plugin.meta.supportedPlatforms && plugin.meta.supportedPlatforms.length > 0) {
 				if (!plugin.meta.supportedPlatforms.includes(this.currentPlatform)) {
-					console.warn(
-						`[PluginManager] Plugin ${id} does not support platform ${this.currentPlatform}, skipping`
+					this.logger.warn(
+						`Plugin ${id} does not support platform ${this.currentPlatform}, skipping`
 					);
 					continue;
 				}
@@ -246,10 +267,30 @@ export class PluginManager {
 			// 初始化插件
 			if (plugin.init) {
 				try {
-					await plugin.init({ ...initContext, config });
-					console.log(`[PluginManager] Initialized: ${plugin.meta.name}`);
+					// 触发 plugin:load hook（如果 hookManager 存在）
+					if (this.hookManager?.hasHooks(HOOK_NAMES.PLUGIN_LOAD)) {
+						await this.hookManager.emit(HOOK_NAMES.PLUGIN_LOAD, {
+							pluginId: id,
+							pluginName: plugin.meta.name,
+							pluginVersion: plugin.meta.version,
+							timestamp: new Date(),
+						});
+					}
+
+					// 为每个插件创建子 Logger
+					const pluginLogger = this.logger.child(`plugin:${id}`);
+					await plugin.init({
+						...initContext,
+						config,
+						logger: pluginLogger,
+					});
+					this.logger.info(`Initialized: ${plugin.meta.name}`);
 				} catch (error) {
-					console.error(`[PluginManager] Failed to initialize ${plugin.meta.name}:`, error);
+					this.logger.error(
+						`Failed to initialize ${plugin.meta.name}`,
+						undefined,
+						error instanceof Error ? error : new Error(String(error))
+					);
 					throw error;
 				}
 			}
@@ -262,7 +303,7 @@ export class PluginManager {
 		}
 
 		this.initialized = true;
-		console.log(`[PluginManager] All plugins initialized (${initialized.size} plugins)`);
+		this.logger.info(`All plugins initialized (${initialized.size} plugins)`);
 	}
 
 	/**
@@ -270,15 +311,35 @@ export class PluginManager {
 	 */
 	async destroy(): Promise<void> {
 		for (const [id, plugin] of this.plugins) {
+			// 触发 plugin:unload hook（如果 hookManager 存在）
+			if (this.hookManager?.hasHooks(HOOK_NAMES.PLUGIN_UNLOAD)) {
+				await this.hookManager.emit(HOOK_NAMES.PLUGIN_UNLOAD, {
+					pluginId: id,
+					pluginName: plugin.meta.name,
+					pluginVersion: plugin.meta.version,
+					timestamp: new Date(),
+				});
+			}
+
 			if (plugin.destroy) {
 				try {
 					await plugin.destroy();
-					console.log(`[PluginManager] Destroyed: ${plugin.meta.name}`);
+					this.logger.info(`Destroyed: ${plugin.meta.name}`);
 				} catch (error) {
-					console.error(`[PluginManager] Failed to destroy ${plugin.meta.name}:`, error);
+					this.logger.error(
+						`Failed to destroy ${plugin.meta.name}`,
+						undefined,
+						error instanceof Error ? error : new Error(String(error))
+					);
 				}
 			}
 		}
+
+		// 清理该插件管理器注册的所有 hook
+		if (this.hookManager) {
+			this.hookManager.clearBySource("plugin-manager");
+		}
+
 		this.plugins.clear();
 		this.initialized = false;
 	}
@@ -319,8 +380,8 @@ export class PluginManager {
 					(cap) => !context.capabilities.hasCapability(cap)
 				);
 				if (missingCapabilities.length > 0) {
-					console.warn(
-						`[PluginManager] Plugin ${id} requires capabilities not available on ${this.currentPlatform}: ${missingCapabilities.join(", ")}`
+					this.logger.warn(
+						`Plugin ${id} requires capabilities not available on ${this.currentPlatform}: ${missingCapabilities.join(", ")}`
 					);
 					continue;
 				}
@@ -331,7 +392,11 @@ export class PluginManager {
 					const pluginTools = await plugin.getTools(context);
 					tools.push(...pluginTools);
 				} catch (error) {
-					console.error(`[PluginManager] Failed to get tools from ${plugin.meta.name}:`, error);
+					this.logger.error(
+						`Failed to get tools from ${plugin.meta.name}`,
+						undefined,
+						error instanceof Error ? error : new Error(String(error))
+					);
 				}
 			}
 		}
@@ -361,11 +426,15 @@ export class PluginManager {
 				try {
 					currentEvent = await plugin.preprocessMessage(currentEvent, context);
 					if (currentEvent === null) {
-						console.log(`[PluginManager] Message filtered by ${plugin.meta.name}`);
+						this.logger.info(`Message filtered by ${plugin.meta.name}`);
 						return null;
 					}
 				} catch (error) {
-					console.error(`[PluginManager] Preprocess error in ${plugin.meta.name}:`, error);
+					this.logger.error(
+						`Preprocess error in ${plugin.meta.name}`,
+						undefined,
+						error instanceof Error ? error : new Error(String(error))
+					);
 				}
 			}
 		}
@@ -396,7 +465,11 @@ export class PluginManager {
 				try {
 					await plugin.onEvent(event, context);
 				} catch (error) {
-					console.error(`[PluginManager] Event handler error in ${plugin.meta.name}:`, error);
+					this.logger.error(
+						`Event handler error in ${plugin.meta.name}`,
+						undefined,
+						error instanceof Error ? error : new Error(String(error))
+					);
 				}
 			}
 		}

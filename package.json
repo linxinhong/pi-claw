@@ -12,12 +12,11 @@
 		"dist"
 	],
 	"scripts": {
-		"build": "tsc",
+		"build": "rm -rf dist && tsc && cp -r templates dist/ && cp -r docs dist/ && cp pnpm-lock.yaml dist/ && cp -r scripts dist/ && sed 's|dist/main.js|main.js|g; s|dist/main.d.ts|main.d.ts|g; s|./dist/cli.js|./cli.js|g' package.json > dist/package.json",
 		"start": "node dist/main.js",
 		"dev": "tsx src/main.ts",
 		"typecheck": "tsc --noEmit",
-		"init": "bash scripts/init-workspace.sh",
-		"init:ts": "tsx scripts/init-workspace.ts",
+		"init": "tsx scripts/init-workspace.ts",
 		"lock": "bash scripts/lock-config.sh lock",
 		"unlock": "bash scripts/lock-config.sh unlock",
 		"config:status": "bash scripts/lock-config.sh status",

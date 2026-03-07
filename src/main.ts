@@ -13,7 +13,11 @@ import {
 import type { BotConfig, Bot } from "./core/adapter/index.js";
 import { loadConfig } from "./utils/config.js";
 import type { SandboxConfig } from "./core/sandbox/index.js";
-import * as log from "./utils/log.js";
+import { parseSandboxArg } from "./core/sandbox/index.js";
+import * as log from "./utils/logger/index.js";
+import { createGlobalLogger, PiLogger } from "./utils/logger/index.js";
+import type { LogConfig } from "./utils/logger/index.js";
+import { getHookManager, HOOK_NAMES } from "./core/hook/index.js";
 
 // 重新导出主要入口函数和类型（供外部使用）
 export { createFeishuBot } from "./adapters/feishu/index.js";
@@ -21,10 +25,70 @@ export type { SandboxConfig } from "./core/sandbox/index.js";
 export { adapterRegistry } from "./core/adapter/index.js";
 
 /**
+ * 主入口选项
+ */
+export interface MainOptions {
+	configPath?: string;
+	sandbox?: string;
+	port?: number;
+}
+
+/**
+ * 解析命令行参数
+ */
+function parseArgs(): MainOptions {
+	const args = process.argv.slice(2);
+	const options: MainOptions = {};
+
+	for (let i = 0; i < args.length; i++) {
+		const arg = args[i];
+		if (arg === "--config" && args[i + 1]) {
+			options.configPath = args[++i];
+		} else if (arg === "--sandbox" && args[i + 1]) {
+			options.sandbox = args[++i];
+		} else if (arg === "--port" && args[i + 1]) {
+			options.port = parseInt(args[++i], 10);
+		}
+	}
+
+	return options;
+}
+
+/**
  * 主入口 - 启动机器人
  */
-export async function main(): Promise<void> {
-	const config = loadConfig();
+export async function main(options: MainOptions = {}): Promise<void> {
+	// 如果没有提供选项，尝试从命令行解析
+	if (Object.keys(options).length === 0) {
+		options = parseArgs();
+	}
+
+	const config = loadConfig(options.configPath);
+
+	// 初始化全局 Logger
+	const logConfig: LogConfig = {
+		enabled: true,
+		level: "info",
+		console: true,
+	};
+	const globalLogger = createGlobalLogger(logConfig);
+
+	// 同时设置到 log.ts 的全局引用
+	log.setGlobalLogger(globalLogger);
+
+	// 初始化全局 HookManager
+	const hookManager = getHookManager();
+
+	// 处理 sandbox 配置（CLI 参数优先）
+	let sandboxConfig: SandboxConfig | undefined;
+	if (options.sandbox) {
+		sandboxConfig = parseSandboxArg(options.sandbox);
+	} else if (config.sandbox) {
+		sandboxConfig = config.sandbox as SandboxConfig;
+	}
+
+	// 处理 port（CLI 参数优先）
+	const port = options.port || config.port;
 
 	// 1. 自动发现并加载所有 adapter
 	await loadAdapters();
@@ -36,13 +100,25 @@ export async function main(): Promise<void> {
 	log.logInfo(`Available adapters: ${adapterRegistry.listIds().join(", ")}`);
 	log.logInfo(`Configured platforms: ${platforms.join(", ")}`);
 	log.logInfo(`Working directory: ${config.workspaceDir}`);
-	log.logInfo(`Port: ${config.port}`);
+	log.logInfo(`Port: ${port}`);
+	if (sandboxConfig) {
+		log.logInfo(`Sandbox mode: ${sandboxConfig.type}${sandboxConfig.type === "docker" ? `:${sandboxConfig.container}` : ""}`);
+	}
 
 	if (platforms.length === 0) {
 		throw new Error("No platform configured. Please configure at least one platform in config.json");
 	}
 
-	// 3. 为每个平台创建并启动 bot
+	// 3. 触发 system:startup hook
+	if (hookManager.hasHooks(HOOK_NAMES.SYSTEM_STARTUP)) {
+		await hookManager.emit(HOOK_NAMES.SYSTEM_STARTUP, {
+			timestamp: new Date(),
+			version: "1.0.0",
+			config: { workspaceDir: config.workspaceDir, port, platforms },
+		});
+	}
+
+	// 4. 为每个平台创建并启动 bot
 	const bots: Bot[] = [];
 
 	for (const platform of platforms) {
@@ -57,8 +133,9 @@ export async function main(): Promise<void> {
 		const botConfig: BotConfig = {
 			workspaceDir: config.workspaceDir!,
 			plugins: config.plugins,
-			sandbox: config.sandbox,
-			port: config.port,
+			sandbox: sandboxConfig,
+			port: port,
+			logging: logConfig, // 传递日志配置给工厂
 			...platformConfig, // 合并平台特定配置
 		};
 
@@ -68,10 +145,31 @@ export async function main(): Promise<void> {
 		log.logInfo(`Created bot for platform: ${platform}`);
 	}
 
-	// 4. 启动所有 bot（并行）
-	await Promise.all(bots.map((bot) => bot.start(config.port)));
+	// 5. 启动所有 bot（并行）
+	await Promise.all(bots.map((bot) => bot.start(port)));
 
 	log.logConnected();
+
+	// 6. 注册优雅关闭处理
+	const shutdown = async () => {
+		log.logInfo("Shutting down...");
+
+		// 触发 system:shutdown hook
+		if (hookManager.hasHooks(HOOK_NAMES.SYSTEM_SHUTDOWN)) {
+			await hookManager.emit(HOOK_NAMES.SYSTEM_SHUTDOWN, {
+				timestamp: new Date(),
+				reason: "SIGINT",
+			});
+		}
+
+		// 清理所有 hook
+		hookManager.clearAll();
+
+		process.exit(0);
+	};
+
+	process.on("SIGINT", shutdown);
+	process.on("SIGTERM", shutdown);
 }
 
 // 如果直接运行
