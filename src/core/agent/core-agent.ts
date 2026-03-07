@@ -210,6 +210,18 @@ export class CoreAgent {
 			"",
 		);
 		const resourceLoader = this.createResourceLoader(state.agent!, systemPrompt);
+		const sessionId = `${chatId}-${Date.now()}`;
+		const hookManager = this.config.hookManager;
+
+		// 触发 SESSION_CREATE hook
+		if (hookManager?.hasHooks(HOOK_NAMES.SESSION_CREATE)) {
+			await hookManager.emit(HOOK_NAMES.SESSION_CREATE, {
+				channelId: chatId,
+				sessionId: sessionId,
+				timestamp: new Date(),
+			});
+		}
+
 		const session = new AgentSession({
 			agent: state.agent!,
 			sessionManager: state.sessionManager!,
@@ -246,7 +258,6 @@ export class CoreAgent {
 
 		// 订阅事件并响应
 		let finalResponse = "";
-		const hookManager = this.config.hookManager;
 		const responsePromise = new Promise<string>((resolve) => {
 			session.subscribe(async (agentEvent) => {
 				if (agentEvent.type === "tool_execution_start") {
@@ -299,6 +310,16 @@ export class CoreAgent {
 		);
 
 		await responsePromise;
+
+		// 触发 SESSION_DESTROY hook
+		if (hookManager?.hasHooks(HOOK_NAMES.SESSION_DESTROY)) {
+			await hookManager.emit(HOOK_NAMES.SESSION_DESTROY, {
+				channelId: chatId,
+				sessionId: sessionId,
+				timestamp: new Date(),
+			});
+		}
+
 		return finalResponse || "_No response_";
 	}
 

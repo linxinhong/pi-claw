@@ -21,6 +21,7 @@ import { FeishuPlatformContext } from "./context.js";
 import { parseFeishuMessage } from "./message-parser.js";
 import type { Logger } from "../../utils/logger/index.js";
 import { PiLogger } from "../../utils/logger/index.js";
+import { getHookManager, HOOK_NAMES } from "../../core/hook/index.js";
 
 // ============================================================================
 // Types
@@ -139,12 +140,30 @@ export class FeishuAdapter implements PlatformAdapter {
 
 		// 启动 WebSocket 或 Webhook
 		if (this.wsClient) {
-			return this.startWebSocket();
+			await this.startWebSocket();
+		} else {
+			await this.startWebhook(3000); // 默认端口 3000
 		}
-		return this.startWebhook(3000); // 默认端口 3000
+
+		// 触发 ADAPTER_CONNECT hook
+		const hookManager = getHookManager();
+		if (hookManager.hasHooks(HOOK_NAMES.ADAPTER_CONNECT)) {
+			await hookManager.emit(HOOK_NAMES.ADAPTER_CONNECT, {
+				platform: "feishu",
+				timestamp: new Date(),
+			});
+		}
 	}
 
 	async stop(): Promise<void> {
+		// 触发 ADAPTER_DISCONNECT hook
+		const hookManager = getHookManager();
+		if (hookManager.hasHooks(HOOK_NAMES.ADAPTER_DISCONNECT)) {
+			await hookManager.emit(HOOK_NAMES.ADAPTER_DISCONNECT, {
+				platform: "feishu",
+				timestamp: new Date(),
+			});
+		}
 		this.logger.info("FeishuAdapter stopped");
 	}
 
@@ -284,6 +303,17 @@ export class FeishuAdapter implements PlatformAdapter {
 	}
 
 	private async postMessage(channel: string, text: string): Promise<string> {
+		const hookManager = getHookManager();
+
+		// 发送前触发 MESSAGE_SEND hook
+		if (hookManager.hasHooks(HOOK_NAMES.MESSAGE_SEND)) {
+			await hookManager.emit(HOOK_NAMES.MESSAGE_SEND, {
+				channelId: channel,
+				text: text,
+				timestamp: new Date(),
+			});
+		}
+
 		const result = await this.client.im.message.create({
 			params: { receive_id_type: "chat_id" },
 			data: {
@@ -293,11 +323,25 @@ export class FeishuAdapter implements PlatformAdapter {
 			},
 		});
 
+		const messageId = result.data?.message_id || "";
+
+		// 发送后触发 MESSAGE_SENT hook
+		if (hookManager.hasHooks(HOOK_NAMES.MESSAGE_SENT)) {
+			await hookManager.emit(HOOK_NAMES.MESSAGE_SENT, {
+				channelId: channel,
+				messageId: messageId,
+				text: text,
+				success: result.code === 0,
+				error: result.code !== 0 ? result.msg : undefined,
+				timestamp: new Date(),
+			});
+		}
+
 		if (result.code !== 0) {
 			throw new Error(`Failed to post message: ${result.msg}`);
 		}
 
-		return result.data?.message_id || "";
+		return messageId;
 	}
 
 	private async postInThread(channel: string, parentMessageId: string, text: string): Promise<string> {

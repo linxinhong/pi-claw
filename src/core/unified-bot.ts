@@ -12,6 +12,7 @@ import { CoreAgent, createCoreAgent } from "./agent/index.js";
 import { ModelManager } from "./model/index.js";
 import { createExecutor } from "./sandbox/index.js";
 import { EventsWatcher } from "./services/event/index.js";
+import { getHookManager, HOOK_NAMES } from "./hook/index.js";
 import { join } from "path";
 
 // ============================================================================
@@ -101,6 +102,19 @@ export class UnifiedBot {
 	}
 
 	private async handleMessage(message: any): Promise<void> {
+		// 触发 MESSAGE_RECEIVE hook
+		const hookManager = getHookManager();
+		if (hookManager.hasHooks(HOOK_NAMES.MESSAGE_RECEIVE)) {
+			await hookManager.emit(HOOK_NAMES.MESSAGE_RECEIVE, {
+				channelId: message.chat.id,
+				messageId: message.id,
+				text: message.content,
+				userId: message.sender?.id,
+				userName: message.sender?.name,
+				timestamp: message.timestamp || new Date(),
+			});
+		}
+
 		// 创建平台上下文
 		const platformContext = this.adapter.createPlatformContext(message.chat.id);
 
