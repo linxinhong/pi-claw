@@ -46,13 +46,38 @@ export interface FeishuContextConfig {
 export class FeishuPlatformContext implements PlatformContext {
 	readonly platform = "feishu";
 	private config: FeishuContextConfig;
+	private statusMessageId: string | null = null; // 状态消息 ID
+	private toolHistory: string[] = []; // 工具执行历史
 
 	constructor(config: FeishuContextConfig) {
 		this.config = config;
 	}
 
 	async sendText(chatId: string, text: string): Promise<string> {
-		return this.config.postMessage(chatId, text);
+		// 如果是工具状态消息（以 "_ ->" 开头），更新状态卡片
+		if (text.startsWith("_ -> ") || text.startsWith("_Error:")) {
+			const cleanText = text.replace(/^_/, "").replace(/_$/, "");
+			this.toolHistory.push(cleanText);
+
+			const historyText = this.toolHistory.join("\n");
+			if (this.statusMessageId) {
+				await this.config.updateMessage(this.statusMessageId, `🤔 处理中...\n\n${historyText}`);
+				return this.statusMessageId;
+			}
+		}
+
+		// 如果还没有状态消息，先创建一个
+		if (!this.statusMessageId) {
+			this.statusMessageId = await this.config.postMessage(chatId, "🤔 处理中...");
+		}
+
+		// 更新状态卡片
+		if (this.toolHistory.length > 0) {
+			const historyText = this.toolHistory.join("\n");
+			await this.config.updateMessage(this.statusMessageId, `🤔 处理中...\n\n${historyText}`);
+		}
+
+		return this.statusMessageId;
 	}
 
 	async updateMessage(messageId: string, content: string): Promise<void> {
@@ -81,6 +106,30 @@ export class FeishuPlatformContext implements PlatformContext {
 
 	async postInThread(chatId: string, parentMessageId: string, text: string): Promise<string> {
 		return this.config.postInThread(chatId, parentMessageId, text);
+	}
+
+	/**
+	 * 重置状态（用于新会话）
+	 */
+	resetStatus(): void {
+		this.statusMessageId = null;
+		this.toolHistory = [];
+	}
+
+	/**
+	 * 完成状态（用于处理完成后更新状态）
+	 * @param finalMessage 最终消息，如果不提供则删除状态消息
+	 */
+	async finishStatus(finalMessage?: string): Promise<void> {
+		if (this.statusMessageId) {
+			if (finalMessage) {
+				await this.config.updateMessage(this.statusMessageId, finalMessage);
+			} else {
+				await this.config.deleteMessage(this.statusMessageId);
+			}
+			this.statusMessageId = null;
+			this.toolHistory = [];
+		}
 	}
 
 	/**
