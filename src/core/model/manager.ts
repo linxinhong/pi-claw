@@ -6,7 +6,7 @@
 
 import type { Api, Model } from "@mariozechner/pi-ai";
 import { join } from "path";
-import { AGENT_DIR } from "../../utils/config.js";
+import { PROJECT_ROOT } from "../../utils/config.js";
 import { loadModelsConfig } from "./config.js";
 import type { ModelsConfig, ModelDefinition, ProviderConfig } from "./types.js";
 import * as log from "../../utils/logger/index.js";
@@ -63,7 +63,7 @@ export class ModelManager {
 	private authStorage: AuthStorage;
 
 	constructor(configPath?: string) {
-		const path = configPath || join(AGENT_DIR, "models.json");
+		const path = configPath || join(PROJECT_ROOT, "models.json");
 		this.config = loadModelsConfig(path);
 
 		// 使用第一个 provider 的第一个 model 作为默认

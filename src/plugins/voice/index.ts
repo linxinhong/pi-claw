@@ -9,10 +9,10 @@ import { Type, Static } from "@sinclair/typebox";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { existsSync, readFileSync } from "fs";
 import OpenAI from "openai";
-import { homedir } from "os";
 import { join } from "path";
 import type { Plugin, PluginContext, MessageEvent, PluginInitContext } from "../../core/plugin/types.js";
 import { CAPABILITIES } from "../../core/plugin/types.js";
+import { PROJECT_ROOT } from "../../utils/config.js";
 import * as log from "../../utils/logger/index.js";
 
 // ============================================================================
@@ -55,7 +55,7 @@ class SpeechRecognizer {
 		}
 
 		try {
-			const modelsPath = join(homedir(), ".pi", "agent", "models.json");
+			const modelsPath = join(PROJECT_ROOT, "models.json");
 			if (existsSync(modelsPath)) {
 				const content = readFileSync(modelsPath, "utf-8");
 				const config = JSON.parse(content) as ModelsConfig;

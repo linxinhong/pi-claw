@@ -23,6 +23,7 @@ import { buildSystemPrompt, loadMemoryContent, loadSkills } from "./prompt-build
 import type { ModelManager } from "../model/manager.js";
 import type { PlatformContext } from "../platform/context.js";
 import type { UniversalMessage } from "../platform/message.js";
+import { PROJECT_ROOT } from "../../utils/config.js";
 import * as log from "../../utils/logger/index.js";
 import type { Executor } from "../sandbox/index.js";
 import { MemoryStore, getAllMemoryTools } from "../services/memory/index.js";
@@ -97,7 +98,7 @@ let globalAuthStorage: AuthStorage | null = null;
 function getModelRegistry(): ModelRegistry {
 	if (!globalModelRegistry) {
 		globalAuthStorage = AuthStorage.create();
-		const modelsJsonPath = join(process.env.HOME || "", ".pi", "agent", "models.json");
+		const modelsJsonPath = join(PROJECT_ROOT, "models.json");
 		globalModelRegistry = new ModelRegistry(globalAuthStorage, modelsJsonPath);
 	}
 	return globalModelRegistry;
