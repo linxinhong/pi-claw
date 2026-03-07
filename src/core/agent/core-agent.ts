@@ -279,7 +279,10 @@ export class CoreAgent {
 				} else if (agentEvent.type === "message_end" && agentEvent.message.role === "assistant") {
 					const assistantMsg = agentEvent.message as any;
 					if (assistantMsg.stopReason) runState.stopReason = assistantMsg.stopReason;
-					if (assistantMsg.errorMessage) runState.errorMessage = assistantMsg.errorMessage;
+					if (assistantMsg.errorMessage) {
+						runState.errorMessage = assistantMsg.errorMessage;
+						log.logError(`[Agent] API error: ${assistantMsg.errorMessage}`);
+					}
 
 					const content = agentEvent.message.content;
 					const textParts = content.filter((c: any) => c.type === "text").map((c: any) => c.text);
@@ -329,6 +332,11 @@ export class CoreAgent {
 			state.memoryStore = new MemoryStore(workspacePath);
 		}
 
+		// 验证工具依赖
+		if (!this.config.executor) {
+			throw new Error("[Agent] Executor is required to create tools");
+		}
+
 		// 创建工具
 		const { createBashTool } = await import("../tools/bash.js");
 		const { createReadTool } = await import("../tools/read.js");
@@ -344,7 +352,15 @@ export class CoreAgent {
 			createModelsTool(this.config.modelManager),
 			// 添加 memory 工具
 			...getAllMemoryTools(state.memoryStore, workspacePath),
-		];
+		].filter(Boolean);
+
+		// 验证工具不为空
+		if (tools.length === 0) {
+			throw new Error("[Agent] No tools available - cannot initialize agent");
+		}
+
+		const toolNames = tools.map((t: any) => t.name).join(", ");
+		log.logInfo(`[Agent] Created ${tools.length} tools for channel ${chatId}: ${toolNames}`);
 
 		// 初始化系统提示
 		const skills = loadSkills(channelDir, workspacePath);

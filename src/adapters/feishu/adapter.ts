@@ -541,10 +541,13 @@ export class FeishuAdapter implements PlatformAdapter {
 	private async fetchUsers(): Promise<void> {
 		try {
 			let pageToken: string | undefined;
+			let totalCount = 0;
 			do {
 				const result = await this.client.contact.user.list({
 					params: { page_size: 100, page_token: pageToken },
 				});
+
+				this.logger.debug(`fetchUsers response: code=${result.code}, items=${result.data?.items?.length || 0}`);
 
 				if (result.code === 0 && result.data?.items) {
 					for (const user of result.data.items) {
@@ -554,14 +557,18 @@ export class FeishuAdapter implements PlatformAdapter {
 								userName: user.name || user.user_id,
 								displayName: user.nickname || user.name || user.user_id,
 							});
+							totalCount++;
 						}
 					}
+				} else if (result.code !== 0) {
+					this.logger.error(`fetchUsers API error: code=${result.code}, msg=${result.msg}`);
 				}
 
 				pageToken = result.data?.page_token;
 			} while (pageToken);
+			this.logger.debug(`fetchUsers completed: total=${totalCount} users`);
 		} catch (err) {
-			this.logger.error("Failed to fetch users", undefined, err instanceof Error ? err : new Error(String(err)));
+			this.logger.error("fetchUsers failed", undefined, err instanceof Error ? err : new Error(String(err)));
 		}
 	}
 
@@ -575,6 +582,8 @@ export class FeishuAdapter implements PlatformAdapter {
 				path: { user_id: userId },
 			});
 
+			this.logger.debug(`fetchUserInfo(${userId}) response: code=${result.code}`);
+
 			if (result.code === 0 && result.data?.user) {
 				const user = result.data.user;
 				const info: UserInfo = {
@@ -585,9 +594,11 @@ export class FeishuAdapter implements PlatformAdapter {
 				this.users.set(userId, info); // 缓存起来
 				this.logger.debug(`Fetched user info for ${userId}: ${info.displayName}`);
 				return info;
+			} else if (result.code !== 0) {
+				this.logger.error(`fetchUserInfo(${userId}) API error: code=${result.code}, msg=${result.msg}`);
 			}
 		} catch (err) {
-			this.logger.error(`Failed to fetch user ${userId}`, undefined, err instanceof Error ? err : new Error(String(err)));
+			this.logger.error(`fetchUserInfo(${userId}) failed`, undefined, err instanceof Error ? err : new Error(String(err)));
 		}
 		return null;
 	}
