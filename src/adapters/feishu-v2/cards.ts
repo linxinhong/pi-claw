@@ -36,11 +36,11 @@ export interface FeishuCardConfig {
  */
 export function buildTextCard(text: string): CardContent {
 	return {
-		type: "template",
-		data: {
-			config: {
-				wide_screen_mode: true,
-			},
+		schema: "2.0",
+		config: {
+			width_mode: "fill",
+		},
+		body: {
 			elements: [
 				{
 					tag: "div",
@@ -59,11 +59,11 @@ export function buildTextCard(text: string): CardContent {
  */
 export function buildCodeCard(code: string, language?: string): CardContent {
 	return {
-		type: "template",
-		data: {
-			config: {
-				wide_screen_mode: true,
-			},
+		schema: "2.0",
+		config: {
+			width_mode: "fill",
+		},
+		body: {
 			elements: [
 				{
 					tag: "div",
@@ -83,18 +83,18 @@ export function buildCodeCard(code: string, language?: string): CardContent {
 export function buildErrorCard(message: string, details?: string): CardContent {
 	const content = details ? `${message}\n\n详细信息：${details}` : message;
 	return {
-		type: "template",
-		data: {
-			config: {
-				wide_screen_mode: true,
+		schema: "2.0",
+		config: {
+			width_mode: "fill",
+		},
+		header: {
+			title: {
+				tag: "plain_text",
+				content: "❌ 错误",
 			},
-			header: {
-				title: {
-					tag: "plain_text",
-					content: "❌ 错误",
-				},
-				template: "red",
-			},
+			template: "red",
+		},
+		body: {
 			elements: [
 				{
 					tag: "div",
@@ -113,18 +113,18 @@ export function buildErrorCard(message: string, details?: string): CardContent {
  */
 export function buildSuccessCard(message: string): CardContent {
 	return {
-		type: "template",
-		data: {
-			config: {
-				wide_screen_mode: true,
+		schema: "2.0",
+		config: {
+			width_mode: "fill",
+		},
+		header: {
+			title: {
+				tag: "plain_text",
+				content: "✅ 成功",
 			},
-			header: {
-				title: {
-					tag: "plain_text",
-					content: "✅ 成功",
-				},
-				template: "green",
-			},
+			template: "green",
+		},
+		body: {
 			elements: [
 				{
 					tag: "div",
@@ -172,11 +172,11 @@ export function buildStatusCard(options: {
 	}
 
 	return {
-		type: "template",
-		data: {
-			config: {
-				wide_screen_mode: true,
-			},
+		schema: "2.0",
+		config: {
+			width_mode: "fill",
+		},
+		body: {
 			elements,
 		},
 	};
@@ -216,11 +216,11 @@ export function buildProgressCard(
 	}
 
 	return {
-		type: "template",
-		data: {
-			config: {
-				wide_screen_mode: true,
-			},
+		schema: "2.0",
+		config: {
+			width_mode: "fill",
+		},
+		body: {
 			elements,
 		},
 	};

@@ -257,31 +257,14 @@ export interface Reaction {
  * 卡片内容
  */
 export interface CardContent {
-	/** 卡片类型 */
-	type?: "template";
-	/** 卡片数据 */
-	data?: {
-		/** 卡片配置 */
-		config?: {
-			wide_screen_mode?: boolean;
-		};
-		/** 卡片头部 */
-		header?: {
-			title?: {
-				tag: string;
-				content: string;
-			};
-			template?: string;
-		};
-		/** 卡片元素 */
-		elements?: CardElement[];
-	};
-	/** 兼容旧格式 */
-	schema?: string;
+	/** 卡片 schema */
+	schema: "2.0";
+	/** 卡片配置 */
 	config?: {
 		width_mode?: "fill" | "adaptive";
 		update_multi?: boolean;
 	};
+	/** 卡片头部 */
 	header?: {
 		title?: {
 			tag: string;
@@ -289,7 +272,8 @@ export interface CardContent {
 		};
 		template?: string;
 	};
-	body?: {
+	/** 卡片主体 */
+	body: {
 		elements: CardElement[];
 	};
 }
