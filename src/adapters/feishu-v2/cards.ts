@@ -36,16 +36,16 @@ export interface FeishuCardConfig {
  */
 export function buildTextCard(text: string): CardContent {
 	return {
-		schema: "2.0",
-		config: {
-			width_mode: "fill",
-		},
-		body: {
+		type: "template",
+		data: {
+			config: {
+				wide_screen_mode: true,
+			},
 			elements: [
 				{
-					tag: "markdown",
+					tag: "div",
 					text: {
-						tag: "plain_text",
+						tag: "lark_md",
 						content: text,
 					},
 				},
@@ -59,13 +59,16 @@ export function buildTextCard(text: string): CardContent {
  */
 export function buildCodeCard(code: string, language?: string): CardContent {
 	return {
-		schema: "2.0",
-		body: {
+		type: "template",
+		data: {
+			config: {
+				wide_screen_mode: true,
+			},
 			elements: [
 				{
-					tag: "markdown",
+					tag: "div",
 					text: {
-						tag: "plain_text",
+						tag: "lark_md",
 						content: `\`\`\`${language || ""}\n${code}\n\`\`\``,
 					},
 				},
@@ -80,20 +83,23 @@ export function buildCodeCard(code: string, language?: string): CardContent {
 export function buildErrorCard(message: string, details?: string): CardContent {
 	const content = details ? `${message}\n\n详细信息：${details}` : message;
 	return {
-		schema: "2.0",
-		header: {
-			title: {
-				tag: "plain_text",
-				content: "❌ 错误",
+		type: "template",
+		data: {
+			config: {
+				wide_screen_mode: true,
 			},
-			template: "red",
-		},
-		body: {
+			header: {
+				title: {
+					tag: "plain_text",
+					content: "❌ 错误",
+				},
+				template: "red",
+			},
 			elements: [
 				{
-					tag: "markdown",
+					tag: "div",
 					text: {
-						tag: "plain_text",
+						tag: "lark_md",
 						content,
 					},
 				},
@@ -107,20 +113,23 @@ export function buildErrorCard(message: string, details?: string): CardContent {
  */
 export function buildSuccessCard(message: string): CardContent {
 	return {
-		schema: "2.0",
-		header: {
-			title: {
-				tag: "plain_text",
-				content: "✅ 成功",
+		type: "template",
+		data: {
+			config: {
+				wide_screen_mode: true,
 			},
-			template: "green",
-		},
-		body: {
+			header: {
+				title: {
+					tag: "plain_text",
+					content: "✅ 成功",
+				},
+				template: "green",
+			},
 			elements: [
 				{
-					tag: "markdown",
+					tag: "div",
 					text: {
-						tag: "plain_text",
+						tag: "lark_md",
 						content: message,
 					},
 				},
@@ -138,9 +147,9 @@ export function buildStatusCard(options: {
 }): CardContent {
 	const elements: CardElement[] = [
 		{
-			tag: "markdown",
+			tag: "div",
 			text: {
-				tag: "plain_text",
+				tag: "lark_md",
 				content: `**${options.status}**`,
 			},
 		},
@@ -148,14 +157,14 @@ export function buildStatusCard(options: {
 
 	if (options.toolHistory && options.toolHistory.length > 0) {
 		elements.push({
-			tag: "divider",
+			tag: "hr",
 		});
 
 		for (const tool of options.toolHistory) {
 			elements.push({
-				tag: "markdown",
+				tag: "div",
 				text: {
-					tag: "plain_text",
+					tag: "lark_md",
 					content: tool,
 				},
 			});
@@ -163,8 +172,11 @@ export function buildStatusCard(options: {
 	}
 
 	return {
-		schema: "2.0",
-		body: {
+		type: "template",
+		data: {
+			config: {
+				wide_screen_mode: true,
+			},
 			elements,
 		},
 	};
@@ -179,9 +191,9 @@ export function buildProgressCard(
 ): CardContent {
 	const elements: CardElement[] = [
 		{
-			tag: "markdown",
+			tag: "div",
 			text: {
-				tag: "plain_text",
+				tag: "lark_md",
 				content: `**${status}**`,
 			},
 		},
@@ -189,14 +201,14 @@ export function buildProgressCard(
 
 	if (toolHistory.length > 0) {
 		elements.push({
-			tag: "divider",
+			tag: "hr",
 		});
 
 		for (const tool of toolHistory) {
 			elements.push({
-				tag: "markdown",
+				tag: "div",
 				text: {
-					tag: "plain_text",
+					tag: "lark_md",
 					content: tool,
 				},
 			});
@@ -204,8 +216,11 @@ export function buildProgressCard(
 	}
 
 	return {
-		schema: "2.0",
-		body: {
+		type: "template",
+		data: {
+			config: {
+				wide_screen_mode: true,
+			},
 			elements,
 		},
 	};
