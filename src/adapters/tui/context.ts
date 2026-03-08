@@ -8,6 +8,16 @@ import type { PlatformContext, UserInfo, ChannelInfo } from "../../core/platform
 import type { UniversalMessage, UniversalResponse } from "../../core/platform/message.js";
 
 /**
+ * TUI 平台上下文配置
+ */
+export interface TUIPlatformContextOptions {
+	/** 发送文本回调 */
+	onSendText?: (channelId: string, text: string) => void;
+	/** 日志回调（用于工具状态显示） */
+	onLog?: (message: string) => void;
+}
+
+/**
  * TUI 平台上下文
  *
  * 为 TUI 模式提供与 CoreAgent 兼容的平台上下文
@@ -15,19 +25,30 @@ import type { UniversalMessage, UniversalResponse } from "../../core/platform/me
 export class TUIPlatformContext implements PlatformContext {
 	readonly platform = "tui" as const;
 	private channelId: string;
-	private onSendText?: (channelId: string, text: string) => void;
+	private options: TUIPlatformContextOptions;
 
-	constructor(channelId: string, options?: { onSendText?: (channelId: string, text: string) => void }) {
+	constructor(channelId: string, options?: TUIPlatformContextOptions) {
 		this.channelId = channelId;
-		this.onSendText = options?.onSendText;
+		this.options = options || {};
 	}
 
 	/**
 	 * 发送文本消息
+	 *
+	 * 检测工具状态消息并路由到日志面板
 	 */
 	async sendText(chatId: string, text: string): Promise<string> {
-		this.onSendText?.(chatId, text);
-		return text;
+		// 检测工具状态消息（以 _ -> 或 _Error: 开头）
+		if (text.startsWith("_ -> ") || text.startsWith("_Error:")) {
+			// 工具状态 → 日志面板
+			// 移除前缀和后缀的下划线
+			const cleanText = text.replace(/^_/, "").replace(/_$/, "");
+			this.options.onLog?.(cleanText);
+		} else {
+			// 普通消息 → 聊天面板
+			this.options.onSendText?.(chatId, text);
+		}
+		return `msg-${Date.now()}`;
 	}
 
 	/**
@@ -132,7 +153,7 @@ export class TUIPlatformContext implements PlatformContext {
  */
 export function createTUIPlatformContext(
 	channelId: string,
-	options?: { onSendText?: (channelId: string, text: string) => void },
+	options?: TUIPlatformContextOptions,
 ): TUIPlatformContext {
 	return new TUIPlatformContext(channelId, options);
 }

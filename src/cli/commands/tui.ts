@@ -4,8 +4,12 @@
 
 import { Command } from "commander";
 import { PiClawTUI } from "../../adapters/tui/index.js";
+import { createTUIBot } from "../../adapters/tui/factory.js";
 import type { TUIMode } from "../../adapters/tui/types.js";
+import type { TUIAdapter } from "../../adapters/tui/adapter.js";
 import { randomUUID } from "crypto";
+import { homedir } from "os";
+import { join } from "path";
 
 export function registerTUICommand(program: Command): void {
 	program
@@ -14,45 +18,30 @@ export function registerTUICommand(program: Command): void {
 		.option("-m, --mode <mode>", "运行模式: chat, monitor, both", "chat")
 		.option("-c, --config <path>", "配置文件路径")
 		.option("-w, --workdir <path>", "工作目录")
+		.option("--model <model>", "默认模型")
 		.action(async (options) => {
 			try {
 				console.log("[pi-claw] Starting TUI...");
 
+				// 确定工作目录
+				const workspaceDir = options.workdir || join(homedir(), ".pi-claw");
+
 				const tui = new PiClawTUI({
-					workingDir: options.workdir,
+					workingDir: workspaceDir,
 					configPath: options.config,
 					initialMode: options.mode as TUIMode,
 				});
 
+				// 创建 Bot（在 TUI 启动前）
+				let adapter: TUIAdapter | null = null;
+
 				// Handle events
 				tui.addEventListener((event) => {
 					if (event.type === "message-send") {
-						// 添加用户消息到聊天面板
-						tui.addChatMessage({
-							id: randomUUID(),
-							role: "user",
-							content: event.content,
-							timestamp: new Date(),
-							channelId: event.channelId,
-						});
-
-						// 模拟 AI 响应（后续可以集成 CoreAgent）
-						tui.addChatMessage({
-							id: randomUUID(),
-							role: "assistant",
-							content: `[TUI Mode] You said: "${event.content}"\n\nNote: CoreAgent integration coming soon. This is a placeholder response.`,
-							timestamp: new Date(),
-							channelId: event.channelId,
-						});
-
-						// 添加日志
-						tui.addLog({
-							id: randomUUID(),
-							level: "info",
-							message: `Message sent: ${event.content.substring(0, 50)}...`,
-							timestamp: new Date(),
-							source: "chat",
-						});
+						// 通过 adapter 处理用户输入
+						if (adapter) {
+							adapter.handleUserInput(event.content, event.channelId);
+						}
 					}
 
 					if (event.type === "exit") {
@@ -79,8 +68,42 @@ export function registerTUICommand(program: Command): void {
 					messages: 0,
 				});
 
+				// 启动 TUI（等待用户选择模式）
+				await tui.start();
+
+				// 如果是 chat 或 both 模式，创建并启动 Bot
+				if (tui.getMode() === "chat" || tui.getMode() === "both") {
+					tui.addLog({
+						id: randomUUID(),
+						level: "info",
+						message: "Initializing CoreAgent...",
+						timestamp: new Date(),
+						source: "tui",
+					});
+
+					const bot = await createTUIBot({
+						workspaceDir,
+						tui,
+						model: options.model,
+					});
+
+					// 获取 adapter 引用
+					adapter = (bot as any).adapter as TUIAdapter;
+
+					// 启动 bot
+					await bot.start();
+
+					tui.addLog({
+						id: randomUUID(),
+						level: "info",
+						message: "CoreAgent initialized successfully",
+						timestamp: new Date(),
+						source: "tui",
+					});
+				}
+
 				// Handle graceful shutdown
-				const shutdown = () => {
+				const shutdown = async () => {
 					console.log("\n[pi-claw] Shutting down...");
 					tui.stop();
 					process.exit(0);
@@ -88,8 +111,6 @@ export function registerTUICommand(program: Command): void {
 
 				process.on("SIGINT", shutdown);
 				process.on("SIGTERM", shutdown);
-
-				await tui.start();
 			} catch (error: any) {
 				console.error(`[pi-claw] Error: ${error.message}`);
 				process.exit(1);
