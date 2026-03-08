@@ -146,6 +146,7 @@ export class EventsWatcher {
 	}
 
 	private async handleFile(filename: string): Promise<void> {
+		log.logInfo(`[EventsWatcher] Processing file: ${filename}`);
 		const filePath = join(this.eventsDir, filename);
 
 		try {
@@ -230,6 +231,7 @@ export class EventsWatcher {
 		const now = Date.now();
 
 		if (atTime <= now) {
+			log.logInfo(`[EventsWatcher] One-shot event expired (at=${event.at}, now=${new Date(now).toISOString()}), deleting: ${filename}`);
 			this.deleteFile(filename);
 			return;
 		}
@@ -254,6 +256,7 @@ export class EventsWatcher {
 		}, delay);
 
 		this.timers.set(filename, timer);
+		log.logInfo(`[EventsWatcher] Scheduled one-shot event: ${filename}, delay=${delay}ms, at=${event.at}`);
 	}
 
 	private handlePeriodic(filename: string, event: ScheduledEvent): void {
@@ -265,6 +268,7 @@ export class EventsWatcher {
 			});
 
 			this.crons.set(filename, cron);
+			log.logInfo(`[EventsWatcher] Scheduled periodic event: ${filename}, schedule=${event.schedule}, timezone=${event.timezone}`);
 
 			// 触发 event:schedule hook（通知）
 			if (this.hookManager?.hasHooks(HOOK_NAMES.EVENT_SCHEDULE)) {
@@ -283,6 +287,7 @@ export class EventsWatcher {
 	}
 
 	private async execute(filename: string, event: ScheduledEvent, deleteAfter = true): Promise<void> {
+		log.logInfo(`[EventsWatcher] Executing event: ${filename}, type=${event.type}`);
 		const startTime = Date.now();
 
 		// 构建 hook 上下文

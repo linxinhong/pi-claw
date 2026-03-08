@@ -90,6 +90,9 @@ export class UnifiedBot {
 			},
 		});
 
+		// 设置 hookManager，使事件能够触发 hooks
+		this.eventsWatcher.setHookManager(getHookManager());
+
 		// 创建核心 Agent
 		this.coreAgent = createCoreAgent({
 			modelManager: this.modelManager,
