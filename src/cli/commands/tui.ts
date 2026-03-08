@@ -30,7 +30,7 @@ export function registerTUICommand(program: Command): void {
 				const workspaceDir = options.workdir || join(homedir(), ".pi-claw");
 
 				// 初始化 ConfigManager
-				const config = loadConfig(workspaceDir);
+				const config = loadConfig(join(workspaceDir, "config.json"));
 				const hookManager = getHookManager();
 				const configManager = ConfigManager.getInstance({
 					configPath: options.config,
