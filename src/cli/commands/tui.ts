@@ -97,7 +97,7 @@ export function registerTUICommand(program: Command): void {
 					const bot = await createTUIBot({
 						workspaceDir,
 						tui,
-						model: options.model,
+						model: options.model || config.model,
 					});
 
 					// 获取 adapter 引用
