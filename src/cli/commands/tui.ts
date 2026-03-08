@@ -10,6 +10,9 @@ import type { TUIAdapter } from "../../adapters/tui/adapter.js";
 import { randomUUID } from "crypto";
 import { homedir } from "os";
 import { join } from "path";
+import { ConfigManager } from "../../core/config/manager.js";
+import { getHookManager } from "../../core/hook/index.js";
+import { loadConfig } from "../../utils/config.js";
 
 export function registerTUICommand(program: Command): void {
 	program
@@ -25,6 +28,16 @@ export function registerTUICommand(program: Command): void {
 
 				// 确定工作目录
 				const workspaceDir = options.workdir || join(homedir(), ".pi-claw");
+
+				// 初始化 ConfigManager
+				const config = loadConfig(workspaceDir);
+				const hookManager = getHookManager();
+				const configManager = ConfigManager.getInstance({
+					configPath: options.config,
+					initialConfig: config,
+					hookManager,
+					enableWatch: false, // TUI 模式不需要热更新
+				});
 
 				const tui = new PiClawTUI({
 					workingDir: workspaceDir,
