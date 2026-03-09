@@ -8,12 +8,10 @@
 import {
 	sendTextLark,
 	sendCardLark,
-} from "@larksuiteoapi/feishu-openclaw-plugin/src/messaging/outbound/deliver.js";
-import {
 	sendImageLark,
 	updateCardFeishu,
-} from "@larksuiteoapi/feishu-openclaw-plugin/src/messaging/outbound/send.js";
-import { probeFeishu } from "@larksuiteoapi/feishu-openclaw-plugin/src/channel/probe.js";
+	probeFeishu,
+} from "@larksuiteoapi/feishu-openclaw-plugin";
 import type {
 	PlatformAdapter,
 	PlatformConfig,
@@ -249,8 +247,7 @@ export class FeishuAdapter implements PlatformAdapter {
 		}
 
 		// 动态导入 parseMessageEvent 和 mentionedBot
-		const { parseMessageEvent } = await import("@larksuiteoapi/feishu-openclaw-plugin/src/messaging/inbound/parse.js");
-		const { mentionedBot } = await import("@larksuiteoapi/feishu-openclaw-plugin/src/messaging/inbound/mention.js");
+		const { parseMessageEvent, mentionedBot } = await import("@larksuiteoapi/feishu-openclaw-plugin");
 
 		// 解析消息事件
 		const messageContext = await parseMessageEvent(evt, botOpenId);

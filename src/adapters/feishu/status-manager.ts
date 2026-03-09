@@ -4,8 +4,7 @@
  * 管理飞书卡片状态更新，实现防抖更新机制
  */
 
-import { sendCardLark } from "@larksuiteoapi/feishu-openclaw-plugin/src/messaging/outbound/deliver.js";
-import { updateCardFeishu } from "@larksuiteoapi/feishu-openclaw-plugin/src/messaging/outbound/send.js";
+// 注意：sendCardLark 和 updateCardFeishu 已通过 FeishuAdapter 调用，无需直接导入
 import type { FeishuAdapter } from "./adapter.js";
 import type { ToolCallInfo } from "./types.js";
 import {
