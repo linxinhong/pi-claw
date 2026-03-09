@@ -261,6 +261,22 @@ hasHooks(name: HookName): boolean
 hookCount(name: HookName): number
 ```
 
+##### debug()
+
+获取所有 hook 的调试信息。
+
+```typescript
+debug(): Record<string, { id: string; priority: number; source?: string }[]>
+```
+
+**返回值：** 以 hook 名称为 key，handler 信息数组为 value 的对象
+
+```typescript
+const debugInfo = hookManager.debug();
+console.log(debugInfo["message:receive"]);
+// [{ id: "abc123", priority: 10, source: "my-plugin" }]
+```
+
 #### 清理方法
 
 ##### off()
@@ -421,12 +437,50 @@ interface SessionHookContext {
 }
 ```
 
+### Agent 诊断
+
+| Hook 名称 | 常量 | 触发时机 |
+|-----------|------|---------|
+| `agent:init-start` | `AGENT_INIT_START` | Agent 初始化开始 |
+| `agent:init-end` | `AGENT_INIT_END` | Agent 初始化完成 |
+| `model:get-start` | `MODEL_GET_START` | 模型获取开始 |
+| `model:get-end` | `MODEL_GET_END` | 模型获取完成 |
+
+**Context 类型：**
+
+```typescript
+interface AgentInitStartContext {
+  channelId: string;
+  timestamp: Date;
+}
+
+interface AgentInitEndContext {
+  channelId: string;
+  timestamp: Date;
+}
+
+interface ModelGetStartContext {
+  channelId: string;
+  timestamp: Date;
+}
+
+interface ModelGetEndContext {
+  channelId: string;
+  modelId: string;
+  timestamp: Date;
+}
+```
+
 ### 事件调度
 
 | Hook 名称 | 常量 | 触发时机 |
 |-----------|------|---------|
 | `event:trigger` | `EVENT_TRIGGER` | 事件触发前 |
 | `event:triggered` | `EVENT_TRIGGERED` | 事件触发后 |
+| `event:create` | `EVENT_CREATE` | 事件创建时 |
+| `event:delete` | `EVENT_DELETE` | 事件删除时 |
+| `event:load` | `EVENT_LOAD` | 事件加载时（启动扫描） |
+| `event:schedule` | `EVENT_SCHEDULE` | 事件调度时（加入定时器） |
 
 **Context 类型：**
 
@@ -443,6 +497,38 @@ interface EventTriggeredContext extends EventTriggerContext {
   success: boolean;
   error?: string;
   duration: number;
+}
+
+interface EventCreateContext {
+  eventType: "immediate" | "one-shot" | "periodic";
+  channelId: string;
+  text: string;
+  filename: string;
+  timestamp: Date;
+}
+
+interface EventDeleteContext {
+  filename: string;
+  channelId?: string;
+  eventType?: "immediate" | "one-shot" | "periodic";
+  timestamp: Date;
+}
+
+interface EventLoadContext {
+  eventType: "immediate" | "one-shot" | "periodic";
+  channelId: string;
+  text: string;
+  filename: string;
+  timestamp: Date;
+}
+
+interface EventScheduleContext {
+  eventType: "immediate" | "one-shot" | "periodic";
+  channelId: string;
+  text: string;
+  filename: string;
+  schedule?: string;
+  timestamp: Date;
 }
 ```
 
@@ -468,6 +554,36 @@ interface ToolCalledContext extends ToolCallContext {
   success: boolean;
   error?: string;
   duration: number;
+}
+```
+
+### 配置管理
+
+| Hook 名称 | 常量 | 触发时机 |
+|-----------|------|---------|
+| `config:load` | `CONFIG_LOAD` | 配置加载时 |
+| `config:change` | `CONFIG_CHANGE` | 配置变更时 |
+| `config:reload` | `CONFIG_RELOAD` | 配置重新加载时 |
+| `config:save` | `CONFIG_SAVE` | 配置保存时 |
+
+**Context 类型：** `ConfigHookContext`
+
+```typescript
+interface ConfigHookContext {
+  /** 配置类型 */
+  configType: "global" | "model" | "channel";
+  /** 配置键名 */
+  configKey?: string;
+  /** 频道 ID（仅 channel 类型） */
+  channelId?: string;
+  /** 旧值 */
+  oldValue?: unknown;
+  /** 新值 */
+  newValue?: unknown;
+  /** 时间戳 */
+  timestamp: Date;
+  /** 变更来源 */
+  source: "file" | "api" | "command";
 }
 ```
 
