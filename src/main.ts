@@ -114,7 +114,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
 	}
 
 	if (platforms.length === 0) {
-		throw new Error("No platform configured. Please configure at least one platform in config.json");
+		log.logWarning("No platform configured. Running in standalone mode (events and plugins only).");
 	}
 
 	// 3. 触发 system:before-start hook（bot 创建前）
