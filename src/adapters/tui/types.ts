@@ -7,25 +7,6 @@
 import type { Component } from "@mariozechner/pi-tui";
 
 // ============================================================================
-// 运行模式
-// ============================================================================
-
-/**
- * TUI 运行模式
- */
-export type TUIMode = "chat" | "monitor" | "both";
-
-/**
- * 启动菜单选项
- */
-export interface StartupOption {
-	value: string;
-	label: string;
-	description: string;
-	mode: TUIMode;
-}
-
-// ============================================================================
 // 消息类型
 // ============================================================================
 
@@ -205,7 +186,6 @@ export interface Panel extends Component {
  * TUI 事件
  */
 export type TUIEvent =
-	| { type: "mode-change"; mode: TUIMode }
 	| { type: "channel-select"; channelId: string }
 	| { type: "message-send"; content: string; channelId: string }
 	| { type: "config-change"; key: string; value: unknown }

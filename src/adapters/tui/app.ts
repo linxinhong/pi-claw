@@ -8,18 +8,12 @@ import {
 	TUI,
 	ProcessTerminal,
 	Container,
-	Text,
-	Spacer,
-	Box,
-	Loader,
-	SelectList,
-	TruncatedText,
 	matchesKey,
 	Key,
 	truncateToWidth,
 } from "@mariozechner/pi-tui";
-import type { Component, Focusable } from "@mariozechner/pi-tui";
-import type { TUIMode, TUIEvent, TUIEventListener, StartupOption, ChatMessage, LogMessage, AdapterStatus } from "./types.js";
+import type { Focusable } from "@mariozechner/pi-tui";
+import type { TUIEvent, TUIEventListener, ChatMessage } from "./types.js";
 import { darkTheme } from "./theme.js";
 import type { TUITheme } from "./types.js";
 
@@ -32,93 +26,8 @@ interface PiClawTUIConfig {
 	workingDir?: string;
 	/** 配置文件路径 */
 	configPath?: string;
-	/** 初始模式 */
-	initialMode?: TUIMode;
 	/** 主题 */
 	theme?: TUITheme;
-}
-
-// ============================================================================
-// Startup Menu Component
-// ============================================================================
-
-class StartupMenu implements Component, Focusable {
-	private tui: TUI;
-	private theme: TUITheme;
-	private selectedIndex = 0;
-	private options: StartupOption[];
-	public focused = false;
-	public onSelect?: (option: StartupOption) => void;
-	public onCancel?: () => void;
-
-	constructor(tui: TUI, theme: TUITheme) {
-		this.tui = tui;
-		this.theme = theme;
-		this.options = [
-			{
-				value: "chat",
-				label: "Chat Mode",
-				description: "Interactive chat with AI agent",
-				mode: "chat",
-			},
-			{
-				value: "monitor",
-				label: "Monitor Mode",
-				description: "Monitor adapter status and message logs",
-				mode: "monitor",
-			},
-			{
-				value: "both",
-				label: "Combined Mode",
-				description: "Chat with AI and monitor adapters",
-				mode: "both",
-			},
-		];
-	}
-
-	handleInput(data: string): void {
-		if (matchesKey(data, Key.up)) {
-			this.selectedIndex = Math.max(0, this.selectedIndex - 1);
-			this.tui.requestRender();
-		} else if (matchesKey(data, Key.down)) {
-			this.selectedIndex = Math.min(this.options.length - 1, this.selectedIndex + 1);
-			this.tui.requestRender();
-		} else if (matchesKey(data, Key.enter)) {
-			this.onSelect?.(this.options[this.selectedIndex]);
-		} else if (matchesKey(data, Key.escape) || matchesKey(data, Key.ctrl("c"))) {
-			this.onCancel?.();
-		}
-	}
-
-	invalidate(): void {}
-
-	render(width: number): string[] {
-		const lines: string[] = [];
-
-		// Title
-		const title = this.theme.primary("  Pi Claw TUI");
-		lines.push(title);
-		lines.push(this.theme.muted("  Select a mode to start:"));
-		lines.push("");
-
-		// Options
-		for (let i = 0; i < this.options.length; i++) {
-			const opt = this.options[i];
-			const isSelected = i === this.selectedIndex;
-			const prefix = isSelected ? this.theme.success("> ") : "  ";
-			const label = isSelected ? this.theme.primary(opt.label) : opt.label;
-			const desc = this.theme.muted(`    ${opt.description}`);
-
-			lines.push(`${prefix}${label}`);
-			lines.push(desc);
-			lines.push("");
-		}
-
-		// Help
-		lines.push(this.theme.muted("  ↑/↓: Navigate  Enter: Select  Esc: Exit"));
-
-		return lines.map((line) => truncateToWidth(line, width));
-	}
 }
 
 // ============================================================================
@@ -277,103 +186,6 @@ class ChatPanel extends Container implements Focusable {
 }
 
 // ============================================================================
-// Status Panel Component
-// ============================================================================
-
-class StatusPanel extends Container {
-	private tui: TUI;
-	private theme: TUITheme;
-	private adapters: AdapterStatus[] = [];
-	private logs: LogMessage[] = [];
-	private selectedIndex = 0;
-
-	constructor(tui: TUI, theme: TUITheme) {
-		super();
-		this.tui = tui;
-		this.theme = theme;
-	}
-
-	updateAdapters(adapters: AdapterStatus[]): void {
-		this.adapters = adapters;
-		this.tui.requestRender();
-	}
-
-	addLog(log: LogMessage): void {
-		this.logs.push(log);
-		// Keep only last 100 logs
-		if (this.logs.length > 100) {
-			this.logs = this.logs.slice(-100);
-		}
-		this.tui.requestRender();
-	}
-
-	clearLogs(): void {
-		this.logs = [];
-		this.tui.requestRender();
-	}
-
-	handleInput(data: string): void {
-		if (matchesKey(data, Key.up)) {
-			this.selectedIndex = Math.max(0, this.selectedIndex - 1);
-			this.tui.requestRender();
-		} else if (matchesKey(data, Key.down)) {
-			this.selectedIndex = Math.min(this.adapters.length - 1, this.selectedIndex + 1);
-			this.tui.requestRender();
-		}
-	}
-
-	render(width: number): string[] {
-		const lines: string[] = [];
-		const halfHeight = Math.floor((process.stdout.rows || 24) / 2) - 4;
-
-		// Adapter status section
-		lines.push(this.theme.primary("  [Adapters]"));
-		lines.push(this.theme.muted("  " + "─".repeat(Math.min(width - 2, 60))));
-
-		if (this.adapters.length === 0) {
-			lines.push(this.theme.muted("  No adapters running"));
-		} else {
-			for (const adapter of this.adapters) {
-				const statusIcon = adapter.status === "running"
-					? this.theme.success("●")
-					: adapter.status === "error"
-					? this.theme.error("●")
-					: this.theme.warning("●");
-
-				const line = `  ${statusIcon} ${adapter.name} (${adapter.type})`;
-				lines.push(truncateToWidth(line, width));
-				lines.push(this.theme.muted(`      Channels: ${adapter.channels} | Messages: ${adapter.messages}`));
-			}
-		}
-
-		lines.push("");
-
-		// Logs section
-		lines.push(this.theme.primary("  [Recent Logs]"));
-		lines.push(this.theme.muted("  " + "─".repeat(Math.min(width - 2, 60))));
-
-		const visibleLogs = this.logs.slice(-halfHeight);
-		for (const log of visibleLogs) {
-			const time = log.timestamp.toLocaleTimeString();
-			const levelColor = log.level === "error"
-				? this.theme.error
-				: log.level === "warn"
-				? this.theme.warning
-				: log.level === "debug"
-				? this.theme.muted
-				: this.theme.info;
-
-			const levelLabel = `[${log.level.toUpperCase().padEnd(5)}]`;
-			const source = log.source ? `[${log.source}]` : "";
-			const line = this.theme.muted(`  ${time}`) + " " + levelColor(levelLabel) + " " + source + " " + log.message;
-			lines.push(truncateToWidth(line, width));
-		}
-
-		return lines;
-	}
-}
-
-// ============================================================================
 // Main TUI Application
 // ============================================================================
 
@@ -382,19 +194,15 @@ export class PiClawTUI {
 	private terminal: ProcessTerminal | null = null;
 	private config: PiClawTUIConfig;
 	private theme: TUITheme;
-	private mode: TUIMode = "chat";
 	private listeners: TUIEventListener[] = [];
 	private running = false;
 
 	// Panels
-	private startupMenu: StartupMenu | null = null;
 	private chatPanel: ChatPanel | null = null;
-	private statusPanel: StatusPanel | null = null;
 
 	constructor(config: PiClawTUIConfig = {}) {
 		this.config = config;
 		this.theme = config.theme || darkTheme;
-		this.mode = config.initialMode || "chat";
 	}
 
 	/**
@@ -411,39 +219,9 @@ export class PiClawTUI {
 		console.log("[TUI] Starting main loop...");
 		this.tui.start();
 
-		// Show startup menu
-		console.log("[TUI] Showing startup menu...");
-		await this.showStartupMenu();
-	}
-
-	/**
-	 * 显示启动菜单
-	 */
-	private async showStartupMenu(): Promise<void> {
-		return new Promise((resolve) => {
-			if (!this.tui) {
-				resolve();
-				return;
-			}
-
-			this.startupMenu = new StartupMenu(this.tui, this.theme);
-
-			this.startupMenu.onSelect = (option) => {
-				this.mode = option.mode;
-				this.tui?.removeChild(this.startupMenu!);
-				this.startupMenu = null;
-				this.showMainPanel();
-				resolve();
-			};
-
-			this.startupMenu.onCancel = () => {
-				this.stop();
-				resolve();
-			};
-
-			this.tui.addChild(this.startupMenu);
-			this.tui.setFocus(this.startupMenu);
-		});
+		// Show main panel directly
+		console.log("[TUI] Showing chat panel...");
+		this.showMainPanel();
 	}
 
 	/**
@@ -452,22 +230,15 @@ export class PiClawTUI {
 	private showMainPanel(): void {
 		if (!this.tui) return;
 
-		if (this.mode === "chat" || this.mode === "both") {
-			this.chatPanel = new ChatPanel(this.tui, this.theme);
-			this.chatPanel.onSendMessage = (content, channelId) => {
-				this.emit({ type: "message-send", content, channelId });
-			};
-			this.chatPanel.onCommand = (command, args) => {
-				this.handleCommand(command, args);
-			};
-			this.tui.addChild(this.chatPanel);
-			this.tui.setFocus(this.chatPanel);
-		}
-
-		if (this.mode === "monitor" || this.mode === "both") {
-			this.statusPanel = new StatusPanel(this.tui, this.theme);
-			this.tui.addChild(this.statusPanel);
-		}
+		this.chatPanel = new ChatPanel(this.tui, this.theme);
+		this.chatPanel.onSendMessage = (content, channelId) => {
+			this.emit({ type: "message-send", content, channelId });
+		};
+		this.chatPanel.onCommand = (command, args) => {
+			this.handleCommand(command, args);
+		};
+		this.tui.addChild(this.chatPanel);
+		this.tui.setFocus(this.chatPanel);
 	}
 
 	/**
@@ -550,28 +321,6 @@ export class PiClawTUI {
 	 */
 	addChatMessage(message: ChatMessage): void {
 		this.chatPanel?.addMessage(message);
-	}
-
-	/**
-	 * 添加日志
-	 */
-	addLog(log: LogMessage): void {
-		this.statusPanel?.addLog(log);
-	}
-
-	/**
-	 * 更新 adapter 状态
-	 */
-	updateAdapterStatus(status: AdapterStatus): void {
-		this.statusPanel?.updateAdapters([status]);
-		this.emit({ type: "adapter-status", status });
-	}
-
-	/**
-	 * 获取当前模式
-	 */
-	getMode(): TUIMode {
-		return this.mode;
 	}
 
 	/**

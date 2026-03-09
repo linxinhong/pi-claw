@@ -143,13 +143,7 @@ export class TUIAdapter implements PlatformAdapter {
 				});
 			},
 			onLog: (message) => {
-				this.config.tui.addLog({
-					id: randomUUID(),
-					level: "info",
-					message,
-					timestamp: new Date(),
-					source: "agent",
-				});
+				console.log(`[Agent] ${message}`);
 			},
 		});
 	}
