@@ -25,6 +25,8 @@ export interface CreateTUIBotConfig {
 	tui: PiClawTUI;
 	/** 默认模型 */
 	model?: string;
+	/** 日志器 */
+	logger?: PiLogger;
 }
 
 // ============================================================================
@@ -39,8 +41,14 @@ export interface CreateTUIBotConfig {
 export async function createTUIBot(config: CreateTUIBotConfig): Promise<UnifiedBot> {
 	const { workspaceDir, tui, model } = config;
 
-	// 1. 创建 Logger
-	const logger = new PiLogger("tui");
+	// 1. 创建 Logger（不输出到控制台）
+	const logDir = join(workspaceDir, "logs");
+	const logger = new PiLogger("tui", {
+		dir: logDir,
+		enabled: true,
+		level: "debug",
+		console: false,
+	});
 
 	logger.info("Creating TUI bot", { workspaceDir });
 
@@ -49,6 +57,7 @@ export async function createTUIBot(config: CreateTUIBotConfig): Promise<UnifiedB
 		workingDir: workspaceDir,
 		tui,
 		model,
+		logger,
 	});
 
 	// 初始化适配器

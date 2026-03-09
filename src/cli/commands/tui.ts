@@ -11,6 +11,8 @@ import { join } from "path";
 import { ConfigManager } from "../../core/config/manager.js";
 import { getHookManager } from "../../core/hook/index.js";
 import { loadConfig } from "../../utils/config.js";
+import { PiLogger } from "../../utils/logger/logger.js";
+import type { Logger } from "../../utils/logger/types.js";
 
 export function registerTUICommand(program: Command): void {
 	program
@@ -21,10 +23,19 @@ export function registerTUICommand(program: Command): void {
 		.option("--model <model>", "默认模型")
 		.action(async (options) => {
 			try {
-				console.log("[pi-claw] Starting TUI...");
-
 				// 确定工作目录
 				const workspaceDir = options.workdir || join(homedir(), ".pi-claw");
+
+				// 创建 TUI 专用 logger，写入文件不输出控制台
+				const logDir = join(workspaceDir, "logs");
+				const logger = new PiLogger("tui", {
+					dir: logDir,
+					enabled: true,
+					level: "debug",
+					console: false, // 不输出到控制台
+				});
+
+				logger.info("Starting TUI...");
 
 				// 初始化 ConfigManager
 				const config = loadConfig(join(workspaceDir, "config.json"));
@@ -39,6 +50,7 @@ export function registerTUICommand(program: Command): void {
 				const tui = new PiClawTUI({
 					workingDir: workspaceDir,
 					configPath: options.config,
+					logger,
 				});
 
 				// 创建 Bot（在 TUI 启动前）
@@ -63,7 +75,7 @@ export function registerTUICommand(program: Command): void {
 				await tui.start();
 
 				// 创建并启动 Bot
-				console.log("[pi-claw] Initializing CoreAgent...");
+				logger.info("Initializing CoreAgent...");
 
 				const bot = await createTUIBot({
 					workspaceDir,
@@ -77,11 +89,11 @@ export function registerTUICommand(program: Command): void {
 				// 启动 bot
 				await bot.start();
 
-				console.log("[pi-claw] CoreAgent initialized successfully");
+				logger.info("CoreAgent initialized successfully");
 
 				// Handle graceful shutdown
 				const shutdown = async () => {
-					console.log("\n[pi-claw] Shutting down...");
+					logger.info("Shutting down...");
 					tui.stop();
 					process.exit(0);
 				};

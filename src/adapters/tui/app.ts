@@ -16,6 +16,7 @@ import type { Focusable } from "@mariozechner/pi-tui";
 import type { TUIEvent, TUIEventListener, ChatMessage } from "./types.js";
 import { darkTheme } from "./theme.js";
 import type { TUITheme } from "./types.js";
+import type { Logger } from "../../utils/logger/types.js";
 
 // ============================================================================
 // Types
@@ -28,6 +29,8 @@ interface PiClawTUIConfig {
 	configPath?: string;
 	/** 主题 */
 	theme?: TUITheme;
+	/** 日志器 */
+	logger?: Logger;
 }
 
 // ============================================================================
@@ -194,6 +197,7 @@ export class PiClawTUI {
 	private terminal: ProcessTerminal | null = null;
 	private config: PiClawTUIConfig;
 	private theme: TUITheme;
+	private logger?: Logger;
 	private listeners: TUIEventListener[] = [];
 	private running = false;
 
@@ -203,24 +207,25 @@ export class PiClawTUI {
 	constructor(config: PiClawTUIConfig = {}) {
 		this.config = config;
 		this.theme = config.theme || darkTheme;
+		this.logger = config.logger;
 	}
 
 	/**
 	 * 启动 TUI
 	 */
 	async start(): Promise<void> {
-		console.log("[TUI] Initializing terminal...");
+		this.logger?.info("Initializing terminal...");
 		this.terminal = new ProcessTerminal();
-		console.log("[TUI] Creating TUI instance...");
+		this.logger?.info("Creating TUI instance...");
 		this.tui = new TUI(this.terminal);
 
 		// Start main loop first (needed for rendering and input)
 		this.running = true;
-		console.log("[TUI] Starting main loop...");
+		this.logger?.info("Starting main loop...");
 		this.tui.start();
 
 		// Show main panel directly
-		console.log("[TUI] Showing chat panel...");
+		this.logger?.info("Showing chat panel...");
 		this.showMainPanel();
 	}
 
@@ -274,7 +279,7 @@ export class PiClawTUI {
 			try {
 				listener(event);
 			} catch (error) {
-				console.error("TUI event listener error:", error);
+				this.logger?.error("TUI event listener error:", undefined, error as Error);
 			}
 		}
 	}

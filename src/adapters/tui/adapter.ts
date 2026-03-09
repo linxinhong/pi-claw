@@ -17,6 +17,7 @@ import type { PlatformContext } from "../../core/platform/context.js";
 import { TUIPlatformContext } from "./context.js";
 import type { PiClawTUI } from "./app.js";
 import type { ChatMessage } from "./types.js";
+import type { Logger } from "../../utils/logger/types.js";
 
 // ============================================================================
 // TUI Adapter Config
@@ -29,6 +30,8 @@ export interface TUIAdapterConfig {
 	tui: PiClawTUI;
 	/** 默认模型 */
 	model?: string;
+	/** 日志器 */
+	logger?: Logger;
 }
 
 // ============================================================================
@@ -44,6 +47,7 @@ export class TUIAdapter implements PlatformAdapter {
 	readonly platform = "tui" as const;
 
 	private config: TUIAdapterConfig;
+	private logger?: Logger;
 	private messageHandlers: Array<(message: UniversalMessage) => void> = [];
 	private runningChannels = new Map<string, { abort: () => void }>();
 	private defaultModel: string | undefined;
@@ -51,6 +55,7 @@ export class TUIAdapter implements PlatformAdapter {
 
 	constructor(config: TUIAdapterConfig) {
 		this.config = config;
+		this.logger = config.logger;
 		this.defaultModel = config.model;
 	}
 
@@ -64,11 +69,11 @@ export class TUIAdapter implements PlatformAdapter {
 
 	async start(): Promise<void> {
 		// TUI 已由外部启动
-		console.log("[TUIAdapter] Started");
+		this.logger?.info("TUIAdapter started");
 	}
 
 	async stop(): Promise<void> {
-		console.log("[TUIAdapter] Stopped");
+		this.logger?.info("TUIAdapter stopped");
 	}
 
 	async sendMessage(response: UniversalResponse): Promise<void> {
@@ -143,7 +148,7 @@ export class TUIAdapter implements PlatformAdapter {
 				});
 			},
 			onLog: (message) => {
-				console.log(`[Agent] ${message}`);
+				this.logger?.debug(`[Agent] ${message}`);
 			},
 		});
 	}
@@ -214,7 +219,7 @@ export class TUIAdapter implements PlatformAdapter {
 			try {
 				handler(message);
 			} catch (error) {
-				console.error("[TUIAdapter] Message handler error:", error);
+				this.logger?.error("TUIAdapter message handler error", undefined, error as Error);
 			}
 		}
 	}
