@@ -72,7 +72,8 @@ export async function loadAdapters(adaptersDir: string = ADAPTERS_DIR): Promise<
 	for (const name of adapterNames) {
 		try {
 			// 动态 import adapter 模块（触发自注册）
-			const modulePath = join(adaptersDir, name, "index.js");
+			// 使用 file:// 协议以支持 ESM
+			const modulePath = `file://${join(adaptersDir, name, "index.js")}`;
 			await import(modulePath);
 			console.log(`[AdapterLoader] Loaded adapter: ${name}`);
 		} catch (error) {

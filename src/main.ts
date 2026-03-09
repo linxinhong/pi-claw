@@ -168,7 +168,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
 			port: port,
 			logging: logConfig, // 传递日志配置给工厂
 			model: config.model, // 全局默认模型（可被平台特定配置覆盖）
-			...platformConfig, // 合并平台特定配置
+			[platform]: platformConfig, // 使用平台名作为键，保留嵌套结构
 		};
 
 		const bot = await factory.createBot(botConfig);
