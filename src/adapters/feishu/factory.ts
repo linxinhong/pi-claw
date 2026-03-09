@@ -19,18 +19,20 @@ import type { FeishuAdapterConfig } from "./types.js";
 export async function createFeishuBot(config: BotConfig): Promise<Bot> {
 	const feishuConfig = config.config as FeishuAdapterConfig;
 	const adapter = new FeishuAdapter();
+	const workingDir = config.workspaceDir || ""
 	await adapter.initialize({
 		platform: "feishu",
 		enabled: true,
 		...feishuConfig,
-	 workingDir: config.workspaceDir || ""
+		workingDir,
+	})
 
 	const bot = new UnifiedBot({
-	 adapter,
-        store: new FeishuStore(workingDir),
-        workingDir,
-        pluginManager: config.pluginManager,
-    })
+		adapter,
+		store: new FeishuStore(workingDir),
+		workingDir,
+		pluginManager: config.pluginManager,
+	})
 
     return bot
 }
