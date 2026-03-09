@@ -63,12 +63,23 @@ function timestamp(): string {
 // 全局 Logger 引用
 let globalLogger: Logger | null = null;
 
+// 静默模式开关（TUI 模式下禁用控制台输出）
+let silentMode = false;
+
 /**
  * 设置全局 Logger
  * 设置后，log 函数会同时写入文件
  */
 export function setGlobalLogger(logger: Logger): void {
 	globalLogger = logger;
+}
+
+/**
+ * 设置静默模式
+ * 启用后，所有控制台输出将被禁用（用于 TUI 模式）
+ */
+export function setSilentMode(silent: boolean): void {
+	silentMode = silent;
 }
 
 /**
@@ -79,6 +90,7 @@ export function getGlobalLogger(): Logger | null {
 }
 
 export function logInfo(message: string, ...args: unknown[]): void {
+	if (silentMode) return;
 	console.log(`${color.dim}${timestamp()}${color.reset} ${color.green}INFO${color.reset} ${message}`, ...args);
 
 	// 同时写入文件
@@ -88,6 +100,7 @@ export function logInfo(message: string, ...args: unknown[]): void {
 }
 
 export function logWarning(message: string, ...args: unknown[]): void {
+	if (silentMode) return;
 	console.warn(`${color.dim}${timestamp()}${color.reset} ${color.yellow}WARN${color.reset} ${message}`, ...args);
 
 	// 同时写入文件
@@ -97,6 +110,7 @@ export function logWarning(message: string, ...args: unknown[]): void {
 }
 
 export function logError(message: string, ...args: unknown[]): void {
+	if (silentMode) return;
 	console.error(`${color.dim}${timestamp()}${color.reset} ${color.red}ERROR${color.reset} ${message}`, ...args);
 
 	// 同时写入文件
@@ -107,6 +121,7 @@ export function logError(message: string, ...args: unknown[]): void {
 }
 
 export function logToolStart(ctx: LogContext, toolName: string, label: string, args: Record<string, unknown>): void {
+	if (silentMode) return;
 	const channelInfo = ctx.channelName ? `#${ctx.channelName}` : ctx.channelId;
 	console.log(
 		`${color.dim}${timestamp()}${color.reset} ${color.cyan}${channelInfo}${color.reset} ${color.magenta}TOOL${color.reset} ${toolName}: ${label}`,
@@ -114,6 +129,7 @@ export function logToolStart(ctx: LogContext, toolName: string, label: string, a
 }
 
 export function logToolSuccess(ctx: LogContext, toolName: string, durationMs: number, result: string): void {
+	if (silentMode) return;
 	const channelInfo = ctx.channelName ? `#${ctx.channelName}` : ctx.channelId;
 	const duration = (durationMs / 1000).toFixed(1);
 	const truncated = result.length > 200 ? result.substring(0, 200) + "..." : result;
@@ -123,6 +139,7 @@ export function logToolSuccess(ctx: LogContext, toolName: string, durationMs: nu
 }
 
 export function logToolError(ctx: LogContext, toolName: string, durationMs: number, error: string): void {
+	if (silentMode) return;
 	const channelInfo = ctx.channelName ? `#${ctx.channelName}` : ctx.channelId;
 	const duration = (durationMs / 1000).toFixed(1);
 	console.error(
@@ -131,17 +148,20 @@ export function logToolError(ctx: LogContext, toolName: string, durationMs: numb
 }
 
 export function logResponseStart(ctx: LogContext): void {
+	if (silentMode) return;
 	const channelInfo = ctx.channelName ? `#${ctx.channelName}` : ctx.channelId;
 	console.log(`${color.dim}${timestamp()}${color.reset} ${color.cyan}${channelInfo}${color.reset} ${color.blue}RESP${color.reset} Starting response...`);
 }
 
 export function logResponse(ctx: LogContext, text: string): void {
+	if (silentMode) return;
 	const channelInfo = ctx.channelName ? `#${ctx.channelName}` : ctx.channelId;
 	const truncated = text.length > 100 ? text.substring(0, 100) + "..." : text;
 	console.log(`${color.dim}${timestamp()}${color.reset} ${color.cyan}${channelInfo}${color.reset} ${color.blue}RESP${color.reset} ${truncated}`);
 }
 
 export function logThinking(ctx: LogContext, thinking: string): void {
+	if (silentMode) return;
 	const channelInfo = ctx.channelName ? `#${ctx.channelName}` : ctx.channelId;
 	const truncated = thinking.length > 100 ? thinking.substring(0, 100) + "..." : thinking;
 	console.log(`${color.dim}${timestamp()}${color.reset} ${color.cyan}${channelInfo}${color.reset} ${color.magenta}THINK${color.reset} ${truncated}`);
@@ -154,18 +174,22 @@ export function logUsageSummary(ctx: LogContext, usage: UsageSummary, contextTok
 
 	const summary = `📊 Tokens: ${usage.input.toLocaleString()} in / ${usage.output.toLocaleString()} out${costStr} | Context: ${contextPercent}%`;
 
-	console.log(
-		`${color.dim}${timestamp()}${color.reset} ${color.cyan}${channelInfo}${color.reset} ${color.green}USAGE${color.reset} ${summary}`,
-	);
+	if (!silentMode) {
+		console.log(
+			`${color.dim}${timestamp()}${color.reset} ${color.cyan}${channelInfo}${color.reset} ${color.green}USAGE${color.reset} ${summary}`,
+		);
+	}
 
 	return summary;
 }
 
 export function logConnected(): void {
+	if (silentMode) return;
 	console.log(`${color.dim}${timestamp()}${color.reset} ${color.green}✓${color.reset} Connected to Feishu`);
 }
 
 export function logMessageReceive(ctx: LogContext, content: string, messageId: string): void {
+	if (silentMode) return;
 	const channelInfo = ctx.channelName ? `#${ctx.channelName}` : ctx.channelId;
 	const platformTag = ctx.platform ? `[${ctx.platform}]` : "";
 	const userInfo = ctx.userName || "unknown";
@@ -176,6 +200,7 @@ export function logMessageReceive(ctx: LogContext, content: string, messageId: s
 }
 
 export function logMessageReply(ctx: LogContext, contentLength: number, durationMs: number): void {
+	if (silentMode) return;
 	const channelInfo = ctx.channelName ? `#${ctx.channelName}` : ctx.channelId;
 	const platformTag = ctx.platform ? `[${ctx.platform}]` : "";
 	const duration = (durationMs / 1000).toFixed(1);

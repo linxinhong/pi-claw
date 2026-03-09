@@ -13,6 +13,7 @@ import { getHookManager } from "../../core/hook/index.js";
 import { loadConfig } from "../../utils/config.js";
 import { PiLogger } from "../../utils/logger/logger.js";
 import type { Logger } from "../../utils/logger/types.js";
+import { setSilentMode } from "../../utils/logger/console.js";
 
 export function registerTUICommand(program: Command): void {
 	program
@@ -70,6 +71,9 @@ export function registerTUICommand(program: Command): void {
 						process.exit(0);
 					}
 				});
+
+				// 启用静默模式，禁用控制台日志输出（避免污染 TUI 界面）
+				setSilentMode(true);
 
 				// 启动 TUI
 				await tui.start();

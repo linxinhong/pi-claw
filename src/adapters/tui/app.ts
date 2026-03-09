@@ -130,12 +130,13 @@ class ChatPanel extends Container implements Focusable {
 			const roleColor = msg.role === "user" ? this.theme.info : this.theme.success;
 			const roleLabel = msg.role === "user" ? "You" : "AI";
 
-			lines.push(this.theme.muted(`  [${time}]`) + " " + roleColor(`${roleLabel}:`));
+			const timeLine = this.theme.muted(`  [${time}]`) + " " + roleColor(`${roleLabel}:`);
+			lines.push(truncateToWidth(timeLine, width));
 
 			// Wrap message content
 			const contentLines = this.wrapText(msg.content, width - 4);
 			for (const line of contentLines) {
-				lines.push(`    ${line}`);
+				lines.push(truncateToWidth(`    ${line}`, width));
 			}
 			lines.push("");
 		}
@@ -146,15 +147,16 @@ class ChatPanel extends Container implements Focusable {
 		}
 
 		// Input area
-		lines.push(this.theme.muted("  " + "─".repeat(Math.min(width - 2, 60))));
+		const separatorLine = this.theme.muted("  " + "─".repeat(Math.min(width - 2, 60)));
+		lines.push(truncateToWidth(separatorLine, width));
 		const prompt = this.theme.primary("  > ");
 		const inputLine = this.inputBuffer || this.theme.muted("Type a message...");
-		lines.push(prompt + inputLine);
+		lines.push(truncateToWidth(prompt + inputLine, width));
 
 		// Cursor indicator
 		if (this.focused) {
 			const cursorLine = " ".repeat(4 + this.cursorPos) + this.theme.primary("^");
-			lines.push(cursorLine);
+			lines.push(truncateToWidth(cursorLine, width));
 		}
 
 		return lines;
