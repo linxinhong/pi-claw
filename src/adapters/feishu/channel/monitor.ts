@@ -1,5 +1,5 @@
 /**
- * 飞书 WebSocket 监控
+ * 鶈书 WebSocket 监控
  *
  * 监控飞书 provider 连接状态
  */
@@ -23,13 +23,13 @@ export interface MonitorCallbacks {
 	onError?: (error: Error) => void;
 }
 
-export interface MonitorOptions {
-	/** LarkClient 实例 */
-	client: LarkClient;
-	/** 回调函数 */
-	callbacks: MonitorCallbacks;
-	/** 中止信号 */
-	abortSignal?: AbortSignal;
+ export interface MonitorOptions {
+    /** LarkClient 实例 */
+    client: LarkClient;
+    /** 回调函数 */
+    callbacks: MonitorCallbacks;
+    /** 中止信号 */
+    abortSignal?: AbortSignal;
 }
 
 // ============================================================================
@@ -37,86 +37,78 @@ export interface MonitorOptions {
 // ============================================================================
 
 export class FeishuMonitor {
-	private client: LarkClient;
-	private callbacks: MonitorCallbacks;
-	private abortSignal?: AbortSignal;
-	private connected = false;
+    private client: LarkClient;
+    private callbacks: MonitorCallbacks;
+    private abortSignal?: AbortSignal;
+    private connected = false;
 
-	constructor(options: MonitorOptions) {
-		this.client = options.client;
-		this.callbacks = options.callbacks;
-		this.abortSignal = options.abortSignal;
-	}
+    constructor(options: MonitorOptions) {
+        this.client = options.client;
+        this.callbacks = options.callbacks;
+        this.abortSignal = options.abortSignal;
+    }
+    /**
+     * 启动监控
+     */
+    async start(): Promise<void> {
+        // 构建事件处理器映射
+        const handlers: Record<string, (event: any) => Promise<void> | void> = {
+            "im.message.receive_v1": async (data: any) => {
+                const event = data as FeishuMessageEvent;
+                await this.callbacks.onMessage?.(event);
+            },
+        };
 
-	/**
-	 * 启动监控
-	 */
-	async start(): Promise<void> {
-		// 构建事件处理器映射
-		const handlers: Record<string, (event: any) => Promise<void> | void> = {
-			"im.message.receive_v1": async (data: any) => {
-				const event = data as FeishuMessageEvent;
-				await this.callbacks.onMessage?.(event);
-			},
-		};
-
-		// 卡片事件通过特殊处理（SDK 需要 patch）
-		const cardHandler = async (data: any) => {
-			const event = data as FeishuCardEvent;
-			await this.callbacks.onCard?.(event);
-		};
-
-		// 注册卡片处理器（如果有回调）
-		if (this.callbacks.onCard) {
-			handlers["card"] = cardHandler;
-		}
-
-		// 通知连接状态
-		this.connected = true;
-		this.callbacks.onConnectionChange?.(true);
-
-		try {
-			await this.client.startWS({
-				handlers,
-				abortSignal: this.abortSignal,
-			});
-		} catch (error) {
-			this.connected = false;
-			this.callbacks.onConnectionChange?.(false);
-			this.callbacks.onError?.(
-				error instanceof Error ? error : new Error(String(error))
-			);
-			throw error;
-		} finally {
-			this.connected = false;
-			this.callbacks.onConnectionChange?.(false);
-		}
-	}
-
-	/**
-	 * 停止监控
-	 */
-	stop(): void {
-		this.client.disconnect();
-		this.connected = false;
-		this.callbacks.onConnectionChange?.(false);
-	}
-
-	/**
-	 * 是否已连接
-	 */
-	isConnected(): boolean {
-		return this.connected;
-	}
+        // 卡片事件通过特殊处理（SDK 需要 patch)
+        const cardHandler = async (data: any) => {
+            const event = data as FeishuCardEvent;
+            await this.callbacks.onCard?.(event);
+        };
+        // 注册卡片处理器（如果有回调）
+        if (this.callbacks.onCard) {
+            handlers["card"] = cardHandler;
+        }
+        // 通知连接状态
+        this.connected = true;
+        this.callbacks.onConnectionChange?.(true);
+        try {
+            await this.client.startWS({
+                handlers,
+                abortSignal: this.abortSignal,
+            });
+        } catch (error) {
+            this.connected = false;
+            this.callbacks.onConnectionChange?.(false);
+            this.callbacks.onError?.(
+                error instanceof Error ? error : new Error(String(error))
+            );
+            throw error;
+        } finally {
+            this.connected = false;
+            this.callbacks.onConnectionChange?.(false);
+        }
+    }
+    /**
+     * 停止监控
+     */
+    stop(): void {
+        this.client.disconnect();
+        this.connected = false;
+        this.callbacks.onConnectionChange?.(false);
+    }
+    /**
+     * 是否已连接
+     */
+    isConnected(): boolean {
+        return this.connected;
+    }
 }
-
 // ============================================================================
 // 工厂函数
 // ============================================================================
-
 /**
  * 创建飞书监控器
  */
 export function createFeishuMonitor(options: MonitorOptions): FeishuMonitor {
-	return new FeishuMonitor(options);
+    return new FeishuMonitor(options);
 }
