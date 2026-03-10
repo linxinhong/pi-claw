@@ -26,9 +26,10 @@ interface CacheEntry<T> {
  * Boot 文件内容
  */
 export interface BootContents {
-	identity: string;  // 放在开头
-	profile: string;   // 放在中间（精简后）
-	soul: string;      // 放在末尾
+	identity: string;  // 身份定义
+	user: string;      // 用户配置
+	agents: string;    // Agent 行为协议
+	soul: string;      // 核心规则
 	tools: string;     // 工具使用指南
 }
 
@@ -154,7 +155,8 @@ export function loadBootFiles(workspaceDir: string): BootContents {
 
 	const result: BootContents = {
 		identity: readFile(join(workspaceDir, "boot/identity.md")),
-		profile: readFile(join(workspaceDir, "boot/profile.md")),
+		user: readFile(join(workspaceDir, "boot/user.md")),
+		agents: readFile(join(workspaceDir, "boot/agents.md")),
 		soul: readFile(join(workspaceDir, "boot/soul.md")),
 		tools: readFile(join(workspaceDir, "boot/tools.md")),
 	};
@@ -258,9 +260,14 @@ ${memoryContent || "(no memory yet)"}
 
 `;
 
-	// 5. Profile（如果有）
-	if (bootContents?.profile) {
-		prompt += `## User Profile\n${bootContents.profile}\n\n`;
+	// 5. User Profile（如果有）
+	if (bootContents?.user) {
+		prompt += `## User Profile\n${bootContents.user}\n\n`;
+	}
+
+	// 6. Agent 行为协议（如果有）
+	if (bootContents?.agents) {
+		prompt += `## Agent Protocol\n${bootContents.agents}\n\n`;
 	}
 
 	// 7. Tools 指南（如果有）
