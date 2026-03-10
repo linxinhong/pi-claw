@@ -65,13 +65,9 @@ export class CardBuilder {
 						},
 					},
 					{
-						tag: "note",
-						elements: [
-							{
-								tag: "plain_text",
-								content: "正在处理您的请求，请稍候...",
-							},
-						],
+						tag: "markdown",
+						content: "正在处理您的请求，请稍候...",
+						text_size: "notation",
 					},
 				],
 			},
@@ -100,13 +96,9 @@ export class CardBuilder {
 
 		// 添加状态指示
 		elements.push({
-			tag: "note",
-			elements: [
-				{
-					tag: "plain_text",
-					content: "⏳ 正在生成...",
-				},
-			],
+			tag: "markdown",
+			content: "⏳ 正在生成...",
+			text_size: "notation",
 		});
 
 		return {
@@ -166,18 +158,11 @@ export class CardBuilder {
 		}
 
 		// 添加页脚信息
-		const footerElements: CardElement[] = [];
 		if (options?.elapsed !== undefined) {
-			footerElements.push({
-				tag: "plain_text",
-				content: `⏱️ 耗时: ${this.formatElapsed(options.elapsed)}`,
-			});
-		}
-
-		if (footerElements.length > 0) {
 			elements.push({
-				tag: "note",
-				elements: footerElements,
+				tag: "markdown",
+				content: `⏱️ 耗时: ${this.formatElapsed(options.elapsed)}`,
+				text_size: "notation",
 			});
 		}
 
@@ -252,13 +237,9 @@ export class CardBuilder {
 		}
 
 		return {
-			tag: "note",
-			elements: [
-				{
-					tag: "plain_text",
-					content: parts.join(" | "),
-				},
-			],
+			tag: "markdown",
+			content: parts.join(" | "),
+			text_size: "notation",
 		};
 	}
 
