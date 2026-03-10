@@ -249,8 +249,8 @@ export class CardBuilder {
 	private buildToolCallsList(toolCalls: ToolCallInfo[]): CardElement {
 		const lines = toolCalls.map(tc => {
 			const argsStr = tc.args ? this.formatArgs(tc.args) : "";
-			const argsDisplay = argsStr ? ` '${argsStr}'` : "";
-			return `> ${tc.name}${argsDisplay}`;
+			const argsDisplay = argsStr ? ` \`${argsStr}\`` : "";
+			return `\\> ${tc.name}:${argsDisplay}`;
 		});
 
 		return {
