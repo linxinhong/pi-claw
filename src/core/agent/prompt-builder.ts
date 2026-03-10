@@ -15,14 +15,6 @@ import { formatSkillsForPrompt, loadSkillsFromDir } from "@mariozechner/pi-codin
 // ============================================================================
 
 /**
- * 记忆文件配置
- */
-interface MemoryFile {
-	path: string;
-	title: string;
-}
-
-/**
  * 缓存条目
  */
 interface CacheEntry<T> {
@@ -30,19 +22,77 @@ interface CacheEntry<T> {
 	timestamp: number;
 }
 
+/**
+ * Boot 文件内容
+ */
+export interface BootContents {
+	identity: string;  // 放在开头
+	profile: string;   // 放在中间（精简后）
+	soul: string;      // 放在末尾
+	tools: string;     // 工具使用指南
+}
+
 // ============================================================================
 // Constants
 // ============================================================================
 
-const BOOT_FILES: MemoryFile[] = [
-	{ path: "boot/profile.md", title: "User Profile" },
-	{ path: "boot/soul.md", title: "Core Identity" },
-	{ path: "boot/identity.md", title: "Identity Details" },
-	{ path: "boot/tools.md", title: "Tool Guidelines" },
-];
-
 /** 缓存 TTL：30 秒 */
 const CACHE_TTL = 30000;
+
+// ============================================================================
+// Content Sanitization
+// ============================================================================
+
+/**
+ * 清理 boot 文件内容
+ *
+ * 过滤掉无效信息，节省 token：
+ * - 跳过文件头部说明（以 > 开头的引用块）
+ * - 跳过未选中的 checkbox
+ * - 跳过占位符行
+ * - 保留已选中的 checkbox，移除 checkbox 标记
+ */
+function sanitizeBootContent(content: string): string {
+	const lines = content.split('\n');
+	const result: string[] = [];
+	let inCodeBlock = false;
+
+	for (const line of lines) {
+		// 追踪代码块状态
+		if (line.trim().startsWith('```')) {
+			inCodeBlock = !inCodeBlock;
+			result.push(line);
+			continue;
+		}
+
+		// 代码块内保留原样
+		if (inCodeBlock) {
+			result.push(line);
+			continue;
+		}
+
+		// 跳过文件头部说明
+		if (line.trim().startsWith('> 此文件')) continue;
+
+		// 跳过未选中的 checkbox
+		if (line.match(/^\s*- \[ \]/)) continue;
+
+		// 跳过占位符行
+		if (/\[你的|\[请|\[项目|\[React/.test(line)) continue;
+
+		// 保留已选中的 checkbox，移除标记
+		const checkedMatch = line.match(/^(\s*)- \[x\] (.+)$/);
+		if (checkedMatch) {
+			result.push(`${checkedMatch[1]}- ${checkedMatch[2]}`);
+			continue;
+		}
+
+		result.push(line);
+	}
+
+	// 移除多余空行
+	return result.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
 
 // ============================================================================
 // Cache
@@ -50,6 +100,7 @@ const CACHE_TTL = 30000;
 
 const skillsCache = new Map<string, CacheEntry<Skill[]>>();
 const memoryCache = new Map<string, CacheEntry<string>>();
+const bootCache = new Map<string, CacheEntry<BootContents>>();
 
 /**
  * 检查缓存是否有效
@@ -72,17 +123,66 @@ function cleanupCache<T>(cache: Map<string, CacheEntry<T>>): void {
 }
 
 // ============================================================================
+// Boot Files Loader
+// ============================================================================
+
+/**
+ * 分别加载各个 boot 文件
+ */
+export function loadBootFiles(workspaceDir: string): BootContents {
+	// 检查缓存
+	cleanupCache(bootCache);
+	const cached = bootCache.get(workspaceDir);
+	if (cached) {
+		return cached.data;
+	}
+
+	const readFile = (path: string): string => {
+		try {
+			const content = readFileSync(path, "utf-8").trim();
+			return sanitizeBootContent(content);
+		} catch {
+			return "";
+		}
+	};
+
+	const result: BootContents = {
+		identity: readFile(join(workspaceDir, "boot/identity.md")),
+		profile: readFile(join(workspaceDir, "boot/profile.md")),
+		soul: readFile(join(workspaceDir, "boot/soul.md")),
+		tools: readFile(join(workspaceDir, "boot/tools.md")),
+	};
+
+	// 保存到缓存
+	bootCache.set(workspaceDir, { data: result, timestamp: Date.now() });
+
+	return result;
+}
+
+// ============================================================================
 // Prompt Builder
 // ============================================================================
 
 /**
  * 构建系统提示词
+ *
+ * 结构：
+ * 1. Identity（从 identity.md 提取，放在开头）
+ * 2. Context + Platform Info
+ * 3. Workspace Layout
+ * 4. Skills
+ * 5. Memory（profile + 长期记忆 + 今日日志 + 频道记忆）
+ * 6. Tools
+ * 7. Soul（从 soul.md 提取，放在末尾）
+ * 8. 历史对话摘要（如果有）
  */
 export function buildSystemPrompt(
 	context: AgentContext,
 	skills: Skill[],
 	memoryContent: string,
 	channelDir?: string,
+	bootContents?: BootContents,
+	historyMarkdown?: string,
 ): string {
 	const { workspaceDir, chatId, channels, users } = context;
 
@@ -94,7 +194,15 @@ export function buildSystemPrompt(
 	const skillsText =
 		skills.length > 0 ? formatSkillsForPrompt(skills) : "(no skills installed yet)";
 
-	const prompt = `You are pi-feishu, a platform-agnostic AI assistant. Be concise. No emojis.
+	let prompt = '';
+
+	// 1. Identity（开头）
+	if (bootContents?.identity) {
+		prompt += `## Identity\n${bootContents.identity}\n\n`;
+	}
+
+	// 2. Context
+	prompt += `You are pi-claw, a platform-agnostic AI assistant. Be concise. No emojis.
 
 ## Context
 - For current date/time, use: date
@@ -124,7 +232,10 @@ ${context.workspaceDir}/
     ├── scratch/                 # Your working directory
     └── skills/                  # Channel-specific tools
 
-## Skills (Custom CLI Tools)
+`;
+
+	// 3. Skills
+	prompt += `## Skills (Custom CLI Tools)
 You can create reusable CLI tools for recurring tasks.
 
 ### Creating Skills
@@ -134,7 +245,10 @@ Each skill directory needs a \`SKILL.md\` with YAML frontmatter.
 ### Available Skills
 ${skillsText}
 
-## Memory System
+`;
+
+	// 4. Memory
+	prompt += `## Memory System
 Memory is organized in multiple layers.
 
 ### Memory Files
@@ -149,14 +263,38 @@ Memory is organized in multiple layers.
 ### Current Memory
 ${memoryContent || "(no memory yet)"}
 
-## Tools
+`;
+
+	// 5. Tools
+	prompt += `## Tools
 - bash: Run shell commands (primary tool)
 - read: Read files
 - write: Create/overwrite files
 - edit: Surgical file edits
 
 Each tool requires a "label" parameter (shown to user).
+
 `;
+
+	// 6. Profile（如果有）
+	if (bootContents?.profile) {
+		prompt += `## User Profile\n${bootContents.profile}\n\n`;
+	}
+
+	// 7. Tools 指南（如果有）
+	if (bootContents?.tools) {
+		prompt += `## Tool Guidelines\n${bootContents.tools}\n\n`;
+	}
+
+	// 8. Soul（末尾）
+	if (bootContents?.soul) {
+		prompt += `## Core Rules\n${bootContents.soul}\n\n`;
+	}
+
+	// 9. 历史对话（如果有）
+	if (historyMarkdown) {
+		prompt += `## Recent Conversation\n${historyMarkdown}\n`;
+	}
 
 	// 保存 prompt 到频道目录（调试用）
 	if (channelDir) {
@@ -173,6 +311,8 @@ Each tool requires a "label" parameter (shown to user).
 
 /**
  * 加载记忆内容（带缓存）
+ *
+ * 注意：不再加载 boot 文件，它们由 loadBootFiles 单独加载
  */
 export function loadMemoryContent(channelDir: string, workspaceDir: string): string {
 	// 检查缓存
@@ -185,19 +325,6 @@ export function loadMemoryContent(channelDir: string, workspaceDir: string): str
 
 	// 加载内容
 	const parts: string[] = [];
-
-	// 加载引导文件
-	for (const { path, title } of BOOT_FILES) {
-		const filePath = join(workspaceDir, path);
-		if (existsSync(filePath)) {
-			try {
-				const content = readFileSync(filePath, "utf-8").trim();
-				if (content) parts.push(`### ${title}\n${content}`);
-			} catch {
-				// 忽略错误
-			}
-		}
-	}
 
 	// 加载长期记忆
 	const memoryPath = join(workspaceDir, "memory", "memory.md");

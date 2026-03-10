@@ -20,7 +20,7 @@ import { mkdir } from "fs/promises";
 import { join } from "path";
 import { getChannelDir } from "../../utils/config.js";
 import type { AgentContext } from "./context.js";
-import { buildSystemPrompt, loadMemoryContent, loadSkills } from "./prompt-builder.js";
+import { buildSystemPrompt, loadBootFiles, loadMemoryContent, loadSkills } from "./prompt-builder.js";
 import { convertToMarkdown } from "./message-formatter.js";
 import type { ModelManager } from "../model/manager.js";
 import type { PlatformContext } from "../platform/context.js";
@@ -655,6 +655,7 @@ export class CoreAgent {
 		// 初始化系统提示
 		const skills = loadSkills(channelDir, workspacePath);
 		const memoryContent = loadMemoryContent(channelDir, workspacePath);
+		const bootContents = loadBootFiles(workspacePath);
 		const context: AgentContext = {
 			platform: platformContext,
 			chatId,
@@ -672,7 +673,7 @@ export class CoreAgent {
 			attachments: [],
 			timestamp: message.timestamp.toISOString(),
 		};
-		const systemPrompt = buildSystemPrompt(context, skills, memoryContent, channelDir);
+		const systemPrompt = buildSystemPrompt(context, skills, memoryContent, channelDir, bootContents);
 
 		// 触发 SYSTEM_PROMPT_BUILD hook
 		if (hookManager?.hasHooks(HOOK_NAMES.SYSTEM_PROMPT_BUILD)) {
@@ -807,6 +808,7 @@ export class CoreAgent {
 		// 加载 skills 和 memory（已有缓存，不会重复读取文件）
 		const skills = loadSkills(channelDir, workspacePath);
 		const memoryContent = loadMemoryContent(channelDir, workspacePath);
+		const bootContents = loadBootFiles(workspacePath);
 
 		// 更新 mtime 记录
 		state.lastPromptUpdate = {
@@ -828,7 +830,7 @@ export class CoreAgent {
 			timestamp: "",
 		};
 
-		const systemPrompt = buildSystemPrompt(context, skills, memoryContent, channelDir);
+		const systemPrompt = buildSystemPrompt(context, skills, memoryContent, channelDir, bootContents);
 
 		// 触发 SYSTEM_PROMPT_BUILD hook
 		const hookManager = this.config.hookManager;
