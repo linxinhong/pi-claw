@@ -208,13 +208,12 @@ export function buildSystemPrompt(
 	}
 
 	// 2. Context
-	prompt += `You are pi-claw, a platform-agnostic AI assistant. Be concise. No emojis.
+	prompt += `You are Pi-Claw, a platform-agnostic AI assistant. Be concise. No emojis.
 
 ## Context
-- For current date/time, use: date
-- You have access to previous conversation context including tool results from prior turns.
-- For older history beyond your context, search log.jsonl (contains user messages and your final responses, but not tool results).
+- Current date/time: use \`date\` command
 - Platform: ${context.platform.platform}
+- Timezone: Asia/Shanghai
 
 ## Markdown Formatting
 Bold: **text**, Italic: *text*, Code: \`code\`, Block: \`\`\`code\`\`\`, Links: [text](url)
@@ -251,38 +250,17 @@ Each skill directory needs a \`SKILL.md\` with YAML frontmatter.
 ### Available Skills
 ${skillsText}
 
+> Load skills on-demand based on user intent. Use the minimum necessary skill set.
+
 `;
 
 	// 4. Memory
-	prompt += `## Memory System
-Memory is organized in multiple layers.
-
-### Memory Files
-- **PROFILE.md** - User profile (preferences, identity)
-- **SOUL.md** - Core identity and boundaries
-- **IDENTITY.md** - Detailed behavior guidelines
-- **TOOLS.md** - Tool usage best practices
-- **MEMORY.md** - Long-term memory (AI-extracted stable facts)
-- **memory/YYYY-MM-DD.md** - Daily activity logs (retained 7 days)
-- **channel/MEMORY.md** - Channel-specific context
-
-### Current Memory
+	prompt += `## Memory
 ${memoryContent || "(no memory yet)"}
 
 `;
 
-	// 5. Tools
-	prompt += `## Tools
-- bash: Run shell commands (primary tool)
-- read: Read files
-- write: Create/overwrite files
-- edit: Surgical file edits
-
-Each tool requires a "label" parameter (shown to user).
-
-`;
-
-	// 6. Profile（如果有）
+	// 5. Profile（如果有）
 	if (bootContents?.profile) {
 		prompt += `## User Profile\n${bootContents.profile}\n\n`;
 	}
@@ -416,5 +394,60 @@ export function loadSkills(channelDir: string, workspacePath: string): Skill[] {
 	// 保存到缓存
 	skillsCache.set(cacheKey, { data: result, timestamp: Date.now() });
 
+	return result;
+}
+
+// ============================================================================
+// History Markdown Generator
+// ============================================================================
+
+/**
+ * 格式化时间戳为人类可读格式
+ */
+function formatTimestamp(timestamp: number | string | Date): string {
+	const date = new Date(timestamp);
+	const pad = (n: number) => n.toString().padStart(2, "0");
+	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+/**
+ * 提取消息中的文本内容
+ */
+function extractText(content: unknown): string {
+	if (typeof content === "string") return content;
+	if (Array.isArray(content)) {
+		return content
+			.filter((c): c is { type: "text"; text: string } => c.type === "text")
+			.map(c => c.text)
+			.join("\n");
+	}
+	return "";
+}
+
+/**
+ * 生成历史对话的 Markdown 摘要
+ *
+ * 用于系统提示词中的 ## Recent Conversation 部分
+ */
+export function generateHistoryMarkdown(messages: any[], maxLength = 2000): string {
+	if (messages.length === 0) return "";
+
+	const lines: string[] = [];
+	for (const msg of messages) {
+		const timestamp = formatTimestamp((msg as any).timestamp || Date.now());
+		if (msg.role === "user") {
+			const text = extractText(msg.content);
+			lines.push(`**[${timestamp}] 用户:** ${text}`);
+		} else if (msg.role === "assistant") {
+			const text = extractText(msg.content);
+			const truncated = text.length > 300 ? text.slice(0, 300) + "..." : text;
+			lines.push(`**[${timestamp}] 助手:** ${truncated}`);
+		}
+	}
+
+	let result = lines.join("\n\n");
+	if (result.length > maxLength) {
+		result = result.slice(0, maxLength) + "\n\n... (历史对话已截断)";
+	}
 	return result;
 }

@@ -20,7 +20,7 @@ import { mkdir } from "fs/promises";
 import { join } from "path";
 import { getChannelDir } from "../../utils/config.js";
 import type { AgentContext } from "./context.js";
-import { buildSystemPrompt, loadBootFiles, loadMemoryContent, loadSkills } from "./prompt-builder.js";
+import { buildSystemPrompt, generateHistoryMarkdown, loadBootFiles, loadMemoryContent, loadSkills } from "./prompt-builder.js";
 import { convertToMarkdown } from "./message-formatter.js";
 import type { ModelManager } from "../model/manager.js";
 import type { PlatformContext } from "../platform/context.js";
@@ -673,9 +673,16 @@ export class CoreAgent {
 			attachments: [],
 			timestamp: message.timestamp.toISOString(),
 		};
-		const systemPrompt = buildSystemPrompt(context, skills, memoryContent, channelDir, bootContents);
 
-		// 触发 SYSTEM_PROMPT_BUILD hook
+        // 生成历史对话摘要（需要在 SessionManager 创建之后）
+        const sessionForHistory = state.sessionManager!.buildSessionContext();
+        const historyMarkdown = sessionForHistory.messages.length > 0
+            ? generateHistoryMarkdown(sessionForHistory.messages.slice(-20))
+            : undefined;
+
+        const systemPrompt = buildSystemPrompt(context, skills, memoryContent, channelDir, bootContents, historyMarkdown);
+
+        // 触发 SYSTEM_PROMPT_BUILD hook
 		if (hookManager?.hasHooks(HOOK_NAMES.SYSTEM_PROMPT_BUILD)) {
 			await hookManager.emit(HOOK_NAMES.SYSTEM_PROMPT_BUILD, {
 				channelId: chatId,
@@ -830,9 +837,15 @@ export class CoreAgent {
 			timestamp: "",
 		};
 
-		const systemPrompt = buildSystemPrompt(context, skills, memoryContent, channelDir, bootContents);
+        // 生成历史对话摘要
+        const sessionForPrompt = state.sessionManager!.buildSessionContext();
+        const historyMarkdown = sessionForPrompt.messages.length > 0
+            ? generateHistoryMarkdown(sessionForPrompt.messages.slice(-20))
+            : undefined;
 
-		// 触发 SYSTEM_PROMPT_BUILD hook
+        const systemPrompt = buildSystemPrompt(context, skills, memoryContent, channelDir, bootContents, historyMarkdown);
+
+        // 触发 SYSTEM_PROMPT_BUILD hook
 		const hookManager = this.config.hookManager;
 		if (hookManager?.hasHooks(HOOK_NAMES.SYSTEM_PROMPT_BUILD)) {
 			await hookManager.emit(HOOK_NAMES.SYSTEM_PROMPT_BUILD, {
