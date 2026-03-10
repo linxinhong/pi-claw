@@ -51,6 +51,9 @@ export class FeishuAdapter implements PlatformAdapter {
 	/** 预热频道列表 */
 	private warmupChannels: string[] = [];
 
+	/** PlatformContext 缓存，用于复用卡片状态 */
+	private contextCache: Map<string, FeishuPlatformContext> = new Map();
+
 	constructor(config: FeishuAdapterConfig) {
 		this.config = config;
 		this.logger = new PiLogger("feishu", {
@@ -193,6 +196,7 @@ export class FeishuAdapter implements PlatformAdapter {
 		}
 
 		this.runningChannels.clear();
+		this.contextCache.clear();
 		this.logger.info("FeishuAdapter stopped");
 	}
 
@@ -289,13 +293,34 @@ export class FeishuAdapter implements PlatformAdapter {
 			throw new Error("FeishuAdapter not initialized");
 		}
 
-		return new FeishuPlatformContext({
-			chatId,
-			larkClient: this.larkClient,
-			messageSender: this.messageSender,
-			store: this.store!,
-			logger: this.logger,
-		});
+		// 尝试从缓存获取
+		let context = this.contextCache.get(chatId);
+
+		if (!context) {
+			// 创建新实例并缓存
+			context = new FeishuPlatformContext({
+				chatId,
+				larkClient: this.larkClient,
+				messageSender: this.messageSender,
+				store: this.store!,
+				logger: this.logger,
+			});
+			this.contextCache.set(chatId, context);
+		}
+
+		return context;
+	}
+
+	/**
+	 * 清理 context 缓存
+	 * @param chatId 可选，指定清理的 chatId，不传则清理全部
+	 */
+	clearContextCache(chatId?: string): void {
+		if (chatId) {
+			this.contextCache.delete(chatId);
+		} else {
+			this.contextCache.clear();
+		}
 	}
 
 	isRunning(channelId: string): boolean {
