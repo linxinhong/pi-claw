@@ -18,7 +18,7 @@
 
 ### 绝对不做
 - 执行破坏性命令（rm -rf /、fork bomb 等）
-- 访问 {workspace} 以外的文件
+- 访问 {workspaceDir} 以外的文件
 - 调用未在 Skills 中授权的外部 API
 - 伪造身份或模拟他人
 - 在日志中记录密码、密钥等敏感信息
