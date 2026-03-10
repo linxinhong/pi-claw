@@ -189,12 +189,11 @@ export class UnifiedBot {
 
 		// 发送响应
 		if (response) {
-			const feishuContext = platformContext as any;
-			// 检查是否已经通过 finishThinking 发送过响应
-			const alreadySent = feishuContext.isResponseSent?.();
+			// 检查是否已经通过其他方式发送过响应
+			const alreadySent = platformContext.isResponseSent?.();
 
-			if (!alreadySent && feishuContext.finishStatus) {
-				await feishuContext.finishStatus(response);
+			if (!alreadySent && platformContext.finalizeResponse) {
+				await platformContext.finalizeResponse(response);
 			} else if (!alreadySent) {
 				await platformContext.sendText(message.chat.id, response);
 			}
@@ -238,9 +237,8 @@ export class UnifiedBot {
 
 		// 发送响应
 		if (response) {
-			const feishuContext = platformContext as any;
-			if (feishuContext.finishStatus) {
-				await feishuContext.finishStatus(response);
+			if (platformContext.finalizeResponse) {
+				await platformContext.finalizeResponse(response);
 			} else {
 				await platformContext.sendText(channelId, response);
 			}

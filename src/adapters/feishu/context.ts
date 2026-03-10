@@ -229,4 +229,23 @@ export class FeishuPlatformContext implements PlatformContext {
 		// 暂时返回空数组，工具将在 tools/ 模块中实现
 		return [];
 	}
+
+	// ========================================================================
+	// PlatformContext Optional Methods
+	// ========================================================================
+
+	/**
+	 * 检查响应是否已发送
+	 */
+	isResponseSent(): boolean {
+		return this._responseSent;
+	}
+
+	/**
+	 * 完成响应（更新状态卡片为最终状态）
+	 */
+	async finalizeResponse(content: string): Promise<void> {
+		await this.finishStatus(content);
+		this._responseSent = true;
+	}
 }

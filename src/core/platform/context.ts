@@ -114,6 +114,26 @@ export interface PlatformContext {
 		workspaceDir: string;
 		channelDir: string;
 	}): PlatformTool[] | Promise<PlatformTool[]>;
+
+	/**
+	 * 检查响应是否已发送（可选实现）
+	 *
+	 * 某些平台（如飞书）支持流式更新状态卡片，
+	 * 此方法用于检查是否已通过其他方式发送过响应
+	 *
+	 * @returns 是否已发送响应
+	 */
+	isResponseSent?(): boolean;
+
+	/**
+	 * 完成响应（可选实现）
+	 *
+	 * 某些平台（如飞书）支持状态卡片的最终更新，
+	 * 此方法用于在流式输出完成后更新为最终状态
+	 *
+	 * @param content 最终内容
+	 */
+	finalizeResponse?(content: string): Promise<void>;
 }
 
 /**
