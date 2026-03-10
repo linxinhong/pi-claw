@@ -10,7 +10,7 @@ import type { LarkClient } from "./client/index.js";
 import type { FeishuStore } from "./store.js";
 import type { MessageSender } from "./messaging/outbound/sender.js";
 import type { PiLogger } from "../../utils/logger/index.js";
-import type { ToolCallInfo, MultiCardIds, TimerState } from "./types.js";
+import type { ToolCallInfo, MultiCardIds, TimerState, TimelineEvent } from "./types.js";
 import { CardBuilder } from "./card/builder.js";
 
 // ============================================================================
@@ -70,6 +70,9 @@ export class FeishuPlatformContext implements PlatformContext {
 
 	// 累积的工具调用信息
 	private toolCalls: ToolCallInfo[] = [];
+
+	// 处理流程时间线
+	private timeline: TimelineEvent[] = [];
 
 	// 工具卡片创建锁（防止并发创建多张卡片）
 	private toolCardCreating: boolean = false;
@@ -372,6 +375,7 @@ export class FeishuPlatformContext implements PlatformContext {
 		this.hideThinking = false; // 允许显示思考内容
 		this.thinkingContent = "";
 		this.toolCalls = [];
+		this.timeline = []; // 清空时间线
 		this.toolCardCreating = false; // 重置工具卡片创建锁
 		this.cardIds = {
 			statusCardId: null,
@@ -401,6 +405,11 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * @param content 思考内容
 	 */
 	async updateThinking(content: string): Promise<void> {
+		// 添加到时间线（只在内容第一次更新时添加）
+		if (!this.thinkingContent && content) {
+			this.addThinkingToTimeline(content);
+		}
+
 		// 如果隐藏思考过程，不更新卡片内容
 		if (this.hideThinking) {
 			return;
@@ -463,6 +472,7 @@ export class FeishuPlatformContext implements PlatformContext {
 		this.currentCardStatus = "complete";
 		this.thinkingStartTime = null;
 		this.toolCalls = [];
+		this.timeline = []; // 清空时间线
 		this.thinkingContent = "";
 		this.pendingContent = "";
 		this._responseSent = true;
@@ -509,6 +519,9 @@ export class FeishuPlatformContext implements PlatformContext {
 			args: args,
 			status: "running",
 		});
+
+		// 添加到时间线
+		this.addToolCallToTimeline(toolName, args, "running");
 
 		// 更新或创建工具卡片
 		await this.updateOrCreateToolCard();
@@ -559,6 +572,9 @@ export class FeishuPlatformContext implements PlatformContext {
 			toolCall.result = result;
 		}
 
+		// 更新时间线中对应的工具状态
+		this.updateToolCallInTimeline(toolName, success ? "success" : "error");
+
 		// 更新工具卡片
 		await this.updateOrCreateToolCard();
 	}
@@ -584,6 +600,66 @@ export class FeishuPlatformContext implements PlatformContext {
 		});
 
 		return `⚡ **工具调用**\n${lines.join("\n")}`;
+	}
+
+	// ========================================================================
+	// Timeline Methods
+	// ========================================================================
+
+	/**
+	 * 添加思考内容到时间线
+	 * @param content 思考内容
+	 */
+	addThinkingToTimeline(content: string): void {
+		// 截断思考内容（最多显示 50 个字符）
+		const truncated = content.length > 50 ? content.slice(0, 50) + "..." : content;
+
+		this.timeline.push({
+			type: "thinking",
+			content: truncated,
+		});
+	}
+
+	/**
+	 * 添加工具调用到时间线
+	 */
+	private addToolCallToTimeline(toolName: string, args?: Record<string, any>, status?: "pending" | "running" | "success" | "error"): void {
+		const argsStr = args ? this.formatToolArgs(args) : "";
+
+		this.timeline.push({
+			type: "toolcall",
+			content: toolName,
+			args: argsStr || undefined,
+			status: status || "running",
+		});
+	}
+
+	/**
+	 * 更新时间线中工具调用的状态
+	 */
+	private updateToolCallInTimeline(toolName: string, status: "success" | "error"): void {
+		// 从后往前找到最近的同名工具
+		for (let i = this.timeline.length - 1; i >= 0; i--) {
+			const event = this.timeline[i];
+			if (event.type === "toolcall" && event.content === toolName && event.status === "running") {
+				event.status = status;
+				break;
+			}
+		}
+	}
+
+	/**
+	 * 获取时间线
+	 */
+	getTimeline(): TimelineEvent[] {
+		return [...this.timeline];
+	}
+
+	/**
+	 * 清空时间线
+	 */
+	clearTimeline(): void {
+		this.timeline = [];
 	}
 
 	// ========================================================================

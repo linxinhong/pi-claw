@@ -133,6 +133,11 @@ export const HOOK_NAMES = {
 	MODEL_GET_START: "model:get-start",
 	MODEL_GET_END: "model:get-end",
 
+	// Agent 处理流程
+	AGENT_TURN_START: "agent:turn-start",
+	AGENT_TURN_END: "agent:turn-end",
+	AGENT_THINKING: "agent:thinking",
+
 	// Events 事件调度
 	EVENT_TRIGGER: "event:trigger",
 	EVENT_TRIGGERED: "event:triggered",
@@ -345,6 +350,34 @@ export interface ModelGetEndContext {
 }
 
 /**
+ * Agent Turn 开始上下文
+ */
+export interface AgentTurnStartContext {
+	channelId: string;
+	turnNumber: number;
+	timestamp: Date;
+}
+
+/**
+ * Agent Turn 结束上下文
+ */
+export interface AgentTurnEndContext {
+	channelId: string;
+	turnNumber: number;
+	stopReason: string;
+	timestamp: Date;
+}
+
+/**
+ * Agent 思考上下文
+ */
+export interface AgentThinkingContext {
+	channelId: string;
+	thinking: string;
+	timestamp: Date;
+}
+
+/**
  * 配置 Hook 上下文
  */
 export interface ConfigHookContext {
@@ -397,6 +430,9 @@ export interface HookContextMap {
 	[HOOK_NAMES.AGENT_INIT_END]: AgentInitEndContext;
 	[HOOK_NAMES.MODEL_GET_START]: ModelGetStartContext;
 	[HOOK_NAMES.MODEL_GET_END]: ModelGetEndContext;
+	[HOOK_NAMES.AGENT_TURN_START]: AgentTurnStartContext;
+	[HOOK_NAMES.AGENT_TURN_END]: AgentTurnEndContext;
+	[HOOK_NAMES.AGENT_THINKING]: AgentThinkingContext;
 	[HOOK_NAMES.CONFIG_LOAD]: ConfigHookContext;
 	[HOOK_NAMES.CONFIG_CHANGE]: ConfigHookContext;
 	[HOOK_NAMES.CONFIG_RELOAD]: ConfigHookContext;

@@ -27,6 +27,9 @@ import type {
 	AgentInitEndContext,
 	ModelGetStartContext,
 	ModelGetEndContext,
+	AgentTurnStartContext,
+	AgentTurnEndContext,
+	AgentThinkingContext,
 } from "../../core/hook/types.js";
 import { getHookManager, HOOK_NAMES } from "../../core/hook/index.js";
 
@@ -284,6 +287,28 @@ class DebugPluginImpl implements Plugin {
 		// model:get-end
 		hookManager.on<ModelGetEndContext>(HOOK_NAMES.MODEL_GET_END, async (ctx, next) => {
 			this.log(`[MODEL_GET_END] channelId=${ctx.channelId} modelId=${ctx.modelId}`);
+			return next();
+		});
+
+		// ========== Agent 处理流程 Hook ==========
+
+		// agent:turn-start
+		hookManager.on<AgentTurnStartContext>(HOOK_NAMES.AGENT_TURN_START, async (ctx, next) => {
+			this.log(`[AGENT_TURN_START] turn=${ctx.turnNumber} channelId=${ctx.channelId}`);
+			return next();
+		});
+
+		// agent:turn-end
+		hookManager.on<AgentTurnEndContext>(HOOK_NAMES.AGENT_TURN_END, async (ctx, next) => {
+			this.log(`[AGENT_TURN_END] turn=${ctx.turnNumber} stopReason=${ctx.stopReason} channelId=${ctx.channelId}`);
+			return next();
+		});
+
+		// agent:thinking
+		hookManager.on<AgentThinkingContext>(HOOK_NAMES.AGENT_THINKING, async (ctx, next) => {
+			this.log(
+				`[AGENT_THINKING] channelId=${ctx.channelId}\n  |> ${this.truncate(ctx.thinking, 100)}\n  |> [截断，总长度: ${ctx.thinking.length}]`
+			);
 			return next();
 		});
 

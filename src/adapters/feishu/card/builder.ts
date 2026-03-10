@@ -4,7 +4,7 @@
  * 飞书卡片构建器
  */
 
-import type { CardStatus, ToolCallInfo } from "../types.js";
+import type { CardStatus, ToolCallInfo, TimelineEvent } from "../types.js";
 
 // ============================================================================
 // Types
@@ -106,6 +106,20 @@ export class CardBuilder {
 			config: this.defaultConfig,
 			body: {
 				elements: [this.buildToolCallsList(toolCalls)],
+			},
+		};
+	}
+
+	/**
+	 * 构建时间线卡片
+	 * @param timeline 时间线事件列表
+	 */
+	buildTimelineCard(timeline: TimelineEvent[]): Card {
+		return {
+			schema: "2.0",
+			config: this.defaultConfig,
+			body: {
+				elements: [this.buildTimelineList(timeline)],
 			},
 		};
 	}
@@ -251,6 +265,31 @@ export class CardBuilder {
 			const argsStr = tc.args ? this.formatArgs(tc.args) : "";
 			const argsDisplay = argsStr ? ` \`${argsStr}\`` : "";
 			return `\\> ${tc.name}:${argsDisplay}`;
+		});
+
+		return {
+			tag: "div",
+			text: {
+				tag: "lark_md",
+				content: lines.join("\n"),
+			},
+		};
+	}
+
+	/**
+	 * 构建时间线列表
+	 */
+	private buildTimelineList(timeline: TimelineEvent[]): CardElement {
+		const lines = timeline.map(event => {
+			if (event.type === "thinking") {
+				return `🤔 thinking: \`${event.content}\``;
+			} else {
+				const statusIcon = event.status === "success" ? "✅" :
+				                   event.status === "error" ? "❌" :
+				                   event.status === "running" ? "🔄" : "⏳";
+				const argsDisplay = event.args ? ` \`${event.args}\`` : "";
+				return `${statusIcon} ${event.content}${argsDisplay}`;
+			}
 		});
 
 		return {

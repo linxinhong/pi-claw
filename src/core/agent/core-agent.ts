@@ -406,6 +406,9 @@ export class CoreAgent {
 				errorMessage: undefined,
 			};
 
+			// Turn 计数器
+			let turnNumber = 0;
+
 			// 订阅事件并响应
 			let finalResponse = "";
 			const responsePromise = new Promise<string>((resolve) => {
@@ -477,6 +480,40 @@ export class CoreAgent {
 							const thinkingContent = message.content?.find((c: any) => c.type === "thinking");
 							if (thinkingContent && (platformContext as any).updateThinking) {
 								await (platformContext as any).updateThinking(thinkingContent.thinking);
+
+								// 触发 agent:thinking hook
+								if (hookManager?.hasHooks(HOOK_NAMES.AGENT_THINKING)) {
+									await hookManager.emit(HOOK_NAMES.AGENT_THINKING, {
+										channelId: chatId,
+										thinking: thinkingContent.thinking,
+										timestamp: new Date(),
+									});
+								}
+							}
+						} else if (agentEvent.type === "turn_start") {
+							// Turn 开始
+							turnNumber++;
+
+							// 触发 agent:turn-start hook
+							if (hookManager?.hasHooks(HOOK_NAMES.AGENT_TURN_START)) {
+								await hookManager.emit(HOOK_NAMES.AGENT_TURN_START, {
+									channelId: chatId,
+									turnNumber,
+									timestamp: new Date(),
+								});
+							}
+						} else if (agentEvent.type === "turn_end") {
+							// Turn 结束
+							const stopReason = (agentEvent as any).stopReason || "stop";
+
+							// 触发 agent:turn-end hook
+							if (hookManager?.hasHooks(HOOK_NAMES.AGENT_TURN_END)) {
+								await hookManager.emit(HOOK_NAMES.AGENT_TURN_END, {
+									channelId: chatId,
+									turnNumber,
+									stopReason,
+									timestamp: new Date(),
+								});
 							}
 						} else if (agentEvent.type === "message_end" && agentEvent.message.role === "assistant") {
 							const assistantMsg = agentEvent.message as any;

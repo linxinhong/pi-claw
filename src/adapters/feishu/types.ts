@@ -432,3 +432,17 @@ export interface TimerState {
 	/** 定时器 ID */
 	intervalId: NodeJS.Timeout | null;
 }
+
+/**
+ * 时间线事件
+ */
+export interface TimelineEvent {
+	/** 事件类型 */
+	type: "thinking" | "toolcall";
+	/** 内容：thinking 摘要 或 工具名 */
+	content: string;
+	/** 工具参数（仅 toolcall 类型） */
+	args?: string;
+	/** 工具状态（仅 toolcall 类型） */
+	status?: "pending" | "running" | "success" | "error";
+}
