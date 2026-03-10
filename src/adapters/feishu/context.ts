@@ -57,6 +57,14 @@ export class FeishuPlatformContext implements PlatformContext {
 	// 响应是否已发送标志
 	private _responseSent: boolean = false;
 
+	// 节流相关
+	private lastCardUpdateTime: number = 0;
+	private pendingFlushTimer: NodeJS.Timeout | null = null;
+	private pendingContent: string = ""; // 累积的内容
+	private readonly THROTTLE_MS = 1000; // 节流时间
+	private readonly BATCH_AFTER_GAP_MS = 300; // 长时间空闲后的批量延迟
+	private readonly LONG_GAP_THRESHOLD_MS = 2000; // 长时间空闲阈值
+
 	constructor(options: FeishuPlatformContextOptions) {
 		this.chatId = options.chatId;
 		this.larkClient = options.larkClient;
@@ -141,6 +149,105 @@ export class FeishuPlatformContext implements PlatformContext {
 	}
 
 	/**
+	 * 节流卡片更新
+	 * - 如果距离上次更新超过 THROTTLE_MS，立即更新
+	 * - 如果在节流窗口内，安排延迟更新
+	 * - 如果长时间空闲后（>2秒），先延迟 300ms 批量更新
+	 * - 捕获 230020 速率限制错误并静默跳过
+	 */
+	private async throttledCardUpdate(): Promise<void> {
+		const now = Date.now();
+		const timeSinceLastUpdate = now - this.lastCardUpdateTime;
+
+		// 清除之前的待处理定时器
+		if (this.pendingFlushTimer) {
+			clearTimeout(this.pendingFlushTimer);
+			this.pendingFlushTimer = null;
+		}
+
+		// 检查是否是长时间空闲后的更新（可能是批量事件的开始）
+		if (timeSinceLastUpdate > this.LONG_GAP_THRESHOLD_MS) {
+			// 延迟一小段时间，让批量事件累积
+			this.pendingFlushTimer = setTimeout(async () => {
+				this.pendingFlushTimer = null;
+				await this.doFlushCardUpdate();
+			}, this.BATCH_AFTER_GAP_MS);
+			return;
+		}
+
+		// 如果距离上次更新超过节流时间，立即更新
+		if (timeSinceLastUpdate >= this.THROTTLE_MS) {
+			await this.doFlushCardUpdate();
+			return;
+		}
+
+		// 在节流窗口内，安排延迟更新
+		const delay = this.THROTTLE_MS - timeSinceLastUpdate;
+		this.pendingFlushTimer = setTimeout(async () => {
+			this.pendingFlushTimer = null;
+			await this.doFlushCardUpdate();
+		}, delay);
+	}
+
+	/**
+	 * 执行实际的卡片更新
+	 */
+	private async doFlushCardUpdate(): Promise<void> {
+		if (!this.pendingContent) return;
+
+		const content = this.pendingContent;
+
+		// 如果已有卡片，尝试更新
+		if (this.currentCardMessageId) {
+			try {
+				const card = this.cardBuilder.buildStreamingCard(content);
+				await this.messageSender.updateCard(this.currentCardMessageId, card);
+				this.lastCardUpdateTime = Date.now();
+				this.currentCardStatus = "streaming";
+				return;
+			} catch (error: any) {
+				// 检查是否是速率限制错误 (230020)
+				if (error?.code === 230020) {
+					// 静默跳过，等待下次更新
+					this.logger?.debug("Card update rate limited, skipping");
+					return;
+				}
+				this.logger?.error("Failed to update card", undefined, error as Error);
+				// 不清除 currentCardMessageId，保留以便下次重试
+			}
+		}
+
+		// 没有卡片，创建新卡片
+		try {
+			if (!this.thinkingStartTime) {
+				this.thinkingStartTime = Date.now();
+			}
+			const card = this.cardBuilder.buildStreamingCard(content);
+			const messageId = await this.messageSender.sendCard(this.chatId, card);
+			this.currentCardMessageId = messageId;
+			this.lastCardUpdateTime = Date.now();
+			this.currentCardStatus = "streaming";
+		} catch (error: any) {
+			// 检查是否是速率限制错误
+			if (error?.code === 230020) {
+				this.logger?.debug("Card send rate limited, skipping");
+				return;
+			}
+			this.logger?.error("Failed to send card", undefined, error as Error);
+		}
+	}
+
+	/**
+	 * 清理节流相关的定时器和状态
+	 */
+	cleanupThrottle(): void {
+		if (this.pendingFlushTimer) {
+			clearTimeout(this.pendingFlushTimer);
+			this.pendingFlushTimer = null;
+		}
+	}
+
+	/**
 	 * 显示思考中状态
 	 */
 	async showThinking(): Promise<string> {
@@ -162,10 +269,16 @@ export class FeishuPlatformContext implements PlatformContext {
 				await this.messageSender.updateCard(this.currentCardMessageId, card);
 				this.currentCardStatus = "streaming";
 				return;
-			} catch (error) {
-				// 更新失败，记录错误并尝试创建新卡片
+			} catch (error: any) {
+				// 检查是否是速率限制错误 (230020)
+				if (error?.code === 230020) {
+					// 静默跳过，等待下次更新
+					this.logger?.debug("Streaming card update rate limited, skipping");
+					return;
+				}
+				// 更新失败，记录错误，但不清除 currentCardMessageId
 				this.logger?.error("Failed to update card", undefined, error as Error);
-				this.currentCardMessageId = null;
+				// 继续尝试创建新卡片
 			}
 		}
 
@@ -175,7 +288,12 @@ export class FeishuPlatformContext implements PlatformContext {
 			const messageId = await this.messageSender.sendCard(this.chatId, card);
 			this.currentCardMessageId = messageId;
 			this.currentCardStatus = "streaming";
-		} catch (error) {
+		} catch (error: any) {
+			// 检查是否是速率限制错误
+			if (error?.code === 230020) {
+				this.logger?.debug("Streaming card send rate limited, skipping");
+				return;
+			}
 			this.logger?.error("Failed to send card", undefined, error as Error);
 			// 发送失败，降级为文本消息
 			await this.messageSender.sendText(this.chatId, content);
@@ -186,6 +304,9 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * 完成状态，显示最终结果
 	 */
 	async finishStatus(content: string): Promise<void> {
+		// 清理节流定时器
+		this.cleanupThrottle();
+
 		// 计算耗时
 		const elapsed = this.thinkingStartTime ? Date.now() - this.thinkingStartTime : undefined;
 
@@ -197,6 +318,7 @@ export class FeishuPlatformContext implements PlatformContext {
 				this.currentCardStatus = "complete";
 				this.currentCardMessageId = null;
 				this.thinkingStartTime = null;
+				this.pendingContent = ""; // 清空累积内容
 				return;
 			} catch (error) {
 				this.logger?.error("Failed to update final card", undefined, error as Error);
@@ -208,6 +330,7 @@ export class FeishuPlatformContext implements PlatformContext {
 		await this.messageSender.sendText(this.chatId, content);
 		this.currentCardMessageId = null;
 		this.thinkingStartTime = null;
+		this.pendingContent = ""; // 清空累积内容
 	}
 
 	// ========================================================================
@@ -238,9 +361,9 @@ export class FeishuPlatformContext implements PlatformContext {
 			await this.showThinking();
 		}
 
-		// 更新卡片显示思考内容
-		const card = this.cardBuilder.buildStreamingCard(`💭 思考中...\n\n${content}`);
-		await this.messageSender.updateCard(this.currentCardMessageId!, card);
+		// 累积内容并使用节流更新
+		this.pendingContent = `💭 思考中...\n\n${content}`;
+		await this.throttledCardUpdate();
 	}
 
 	/**
@@ -248,6 +371,9 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * @param content 最终回复内容
 	 */
 	async finishThinking(content: string): Promise<void> {
+		// 清理节流定时器
+		this.cleanupThrottle();
+
 		// 计算耗时
 		const elapsed = this.thinkingStartTime ? Date.now() - this.thinkingStartTime : undefined;
 
@@ -260,6 +386,7 @@ export class FeishuPlatformContext implements PlatformContext {
 				this.currentCardMessageId = null;
 				this.thinkingStartTime = null;
 				this.toolStatusLines = []; // 清空工具状态
+				this.pendingContent = ""; // 清空累积内容
 				this._responseSent = true;
 				return;
 			} catch (error) {
@@ -273,6 +400,7 @@ export class FeishuPlatformContext implements PlatformContext {
 		this.currentCardMessageId = null;
 		this.thinkingStartTime = null;
 		this.toolStatusLines = [];
+		this.pendingContent = ""; // 清空累积内容
 		this._responseSent = true;
 	}
 
@@ -284,31 +412,9 @@ export class FeishuPlatformContext implements PlatformContext {
 		// 累积工具状态
 		this.toolStatusLines.push(statusText);
 
-		const content = `⚡ 执行中...\n\n${this.toolStatusLines.join("\n")}`;
-
-		// 如果已有卡片，尝试更新
-		if (this.currentCardMessageId) {
-			try {
-				const card = this.cardBuilder.buildStreamingCard(content);
-				await this.messageSender.updateCard(this.currentCardMessageId, card);
-				return;
-			} catch (error) {
-				this.logger?.error("Failed to update tool status card", undefined, error as Error);
-				this.currentCardMessageId = null;
-			}
-		}
-
-		// 创建新卡片
-		try {
-			if (!this.thinkingStartTime) {
-				this.thinkingStartTime = Date.now();
-			}
-			const card = this.cardBuilder.buildStreamingCard(content);
-			const messageId = await this.messageSender.sendCard(this.chatId, card);
-			this.currentCardMessageId = messageId;
-		} catch (error) {
-			this.logger?.error("Failed to send tool status card", undefined, error as Error);
-		}
+		// 累积内容并使用节流更新
+		this.pendingContent = `⚡ 执行中...\n\n${this.toolStatusLines.join("\n")}`;
+		await this.throttledCardUpdate();
 	}
 
 	/**
