@@ -186,19 +186,26 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * 完成状态，显示最终结果
 	 */
 	async finishStatus(content: string): Promise<void> {
-		if (!this.currentCardMessageId) {
-			// 如果没有卡片，直接发送文本
-			await this.messageSender.sendText(this.chatId, content);
-			return;
-		}
-
 		// 计算耗时
 		const elapsed = this.thinkingStartTime ? Date.now() - this.thinkingStartTime : undefined;
 
-		// 更新为完成状态
-		const card = this.cardBuilder.buildCompleteCard(content, { elapsed });
-		await this.messageSender.updateCard(this.currentCardMessageId, card);
-		this.currentCardStatus = "complete";
+		// 如果已有卡片，尝试更新
+		if (this.currentCardMessageId) {
+			try {
+				const card = this.cardBuilder.buildCompleteCard(content, { elapsed });
+				await this.messageSender.updateCard(this.currentCardMessageId, card);
+				this.currentCardStatus = "complete";
+				this.currentCardMessageId = null;
+				this.thinkingStartTime = null;
+				return;
+			} catch (error) {
+				this.logger?.error("Failed to update final card", undefined, error as Error);
+				// 更新失败，继续发送文本
+			}
+		}
+
+		// 没有卡片或更新失败，发送文本
+		await this.messageSender.sendText(this.chatId, content);
 		this.currentCardMessageId = null;
 		this.thinkingStartTime = null;
 	}
@@ -241,22 +248,31 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * @param content 最终回复内容
 	 */
 	async finishThinking(content: string): Promise<void> {
-		if (!this.currentCardMessageId) {
-			// 如果没有卡片，直接发送文本
-			await this.messageSender.sendText(this.chatId, content);
-			return;
-		}
-
 		// 计算耗时
 		const elapsed = this.thinkingStartTime ? Date.now() - this.thinkingStartTime : undefined;
 
-		// 更新为完成状态
-		const card = this.cardBuilder.buildCompleteCard(content, { elapsed });
-		await this.messageSender.updateCard(this.currentCardMessageId, card);
-		this.currentCardStatus = "complete";
+		// 如果已有卡片，尝试更新
+		if (this.currentCardMessageId) {
+			try {
+				const card = this.cardBuilder.buildCompleteCard(content, { elapsed });
+				await this.messageSender.updateCard(this.currentCardMessageId, card);
+				this.currentCardStatus = "complete";
+				this.currentCardMessageId = null;
+				this.thinkingStartTime = null;
+				this.toolStatusLines = []; // 清空工具状态
+				this._responseSent = true;
+				return;
+			} catch (error) {
+				this.logger?.error("Failed to update final thinking card", undefined, error as Error);
+				// 更新失败，继续发送文本
+			}
+		}
+
+		// 没有卡片或更新失败，发送文本
+		await this.messageSender.sendText(this.chatId, content);
 		this.currentCardMessageId = null;
 		this.thinkingStartTime = null;
-		this.toolStatusLines = []; // 清空工具状态
+		this.toolStatusLines = [];
 		this._responseSent = true;
 	}
 
