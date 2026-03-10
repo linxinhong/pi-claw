@@ -248,20 +248,16 @@ export class CardBuilder {
 	 */
 	private buildToolCallsList(toolCalls: ToolCallInfo[]): CardElement {
 		const lines = toolCalls.map(tc => {
-			const statusIcon = this.getToolStatusIcon(tc.status);
-
-			// 格式化参数（简化显示）
 			const argsStr = tc.args ? this.formatArgs(tc.args) : "";
-			const argsDisplay = argsStr ? `: ${argsStr}` : "";
-
-			return `${statusIcon} \`${tc.name}\`${argsDisplay}`;
+			const argsDisplay = argsStr ? ` '${argsStr}'` : "";
+			return `> ${tc.name}${argsDisplay}`;
 		});
 
 		return {
 			tag: "div",
 			text: {
 				tag: "lark_md",
-				content: `⚡ **工具调用**\n${lines.join("\n")}`,
+				content: lines.join("\n"),
 			},
 		};
 	}
@@ -313,24 +309,6 @@ export class CardBuilder {
 			content: parts.join(" | "),
 			text_size: "notation",
 		};
-	}
-
-	/**
-	 * 获取工具状态图标
-	 */
-	private getToolStatusIcon(status: string): string {
-		switch (status) {
-			case "pending":
-				return "⏳";
-			case "running":
-				return "🔄";
-			case "success":
-				return "✅";
-			case "error":
-				return "❌";
-			default:
-				return "❓";
-		}
 	}
 
 	/**
