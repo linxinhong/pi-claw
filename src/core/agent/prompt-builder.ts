@@ -157,7 +157,7 @@ export function loadBootFiles(workspaceDir: string): BootContents {
 		identity: readFile(join(workspaceDir, "boot/identity.md")),
 		user: readFile(join(workspaceDir, "boot/user.md")),
 		agents: readFile(join(workspaceDir, "boot/agents.md")).replace(/{USER_MD}/g, `${workspaceDir}/boot/user.md`),
-		soul: readFile(join(workspaceDir, "boot/soul.md")),
+		soul: readFile(join(workspaceDir, "boot/soul.md")).replace(/{workspace}/g, workspaceDir),
 		tools: readFile(join(workspaceDir, "boot/tools.md")),
 	};
 
