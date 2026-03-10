@@ -230,14 +230,17 @@ When mentioning users, use the platform's specific mention format.
 
 ## Workspace Layout
 ${context.workspaceDir}/
-├── MEMORY.md                    # Global memory (all channels)
-├── skills/                      # Global CLI tools you create
-└── ${chatId}/                   # This channel
-    ├── MEMORY.md                # Channel-specific memory
-    ├── log.jsonl                # Message history (no tool results)
-    ├── attachments/             # User shared files
-    ├── scratch/                 # Your working directory
-    └── skills/                  # Channel-specific tools
+├── boot/                       # Boot files (identity.md, soul.md, user.md, etc.)
+├── memory/
+│   ├── memory.md              # Global memory
+│   └── YYYY-MM-DD.md          # Daily logs
+├── skills/                     # Global CLI tools
+└── ${chatId}/                  # This channel
+    ├── MEMORY.md               # Channel memory
+    ├── log.jsonl               # Message history
+    ├── attachments/            # User shared files
+    ├── scratch/                # Working directory
+    └── skills/                 # Channel tools
 
 `;
 
