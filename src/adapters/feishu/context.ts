@@ -265,6 +265,13 @@ export class FeishuPlatformContext implements PlatformContext {
 	}
 
 	/**
+	 * 检查响应是否已经发送（卡片已完成）
+	 */
+	isResponseSent(): boolean {
+		return this.currentCardStatus === "complete";
+	}
+
+	/**
 	 * 添加表情反应
 	 */
 	async addReaction(messageId: string, emoji: string): Promise<void> {

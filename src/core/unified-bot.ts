@@ -189,11 +189,13 @@ export class UnifiedBot {
 
 		// 发送响应
 		if (response) {
-			// 使用 finishStatus 更新状态卡片为最终响应
 			const feishuContext = platformContext as any;
-			if (feishuContext.finishStatus) {
+			// 检查是否已经通过 finishThinking 发送过响应
+			const alreadySent = feishuContext.isResponseSent?.();
+
+			if (!alreadySent && feishuContext.finishStatus) {
 				await feishuContext.finishStatus(response);
-			} else {
+			} else if (!alreadySent) {
 				await platformContext.sendText(message.chat.id, response);
 			}
 
