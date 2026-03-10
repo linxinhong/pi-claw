@@ -674,8 +674,12 @@ export class CoreAgent {
 			timestamp: message.timestamp.toISOString(),
 		};
 
-        // 生成历史对话摘要（需要在 SessionManager 创建之后）
-        const sessionForHistory = state.sessionManager!.buildSessionContext();
+		// 创建 SessionManager（提前创建，用于生成历史摘要）
+		const contextFile = join(channelDir, "context.jsonl");
+		state.sessionManager = SessionManager.open(contextFile, channelDir);
+
+        // 生成历史对话摘要
+        const sessionForHistory = state.sessionManager.buildSessionContext();
         const historyMarkdown = sessionForHistory.messages.length > 0
             ? generateHistoryMarkdown(sessionForHistory.messages.slice(-20))
             : undefined;
@@ -693,10 +697,6 @@ export class CoreAgent {
 
 		// 创建 ModelRegistry（必须在 Agent 之前，因为 getApiKey 需要用到）
 		state.modelRegistry = this.config.modelManager.getRegistry();
-
-		// 创建 SessionManager
-		const contextFile = join(channelDir, "context.jsonl");
-		state.sessionManager = SessionManager.open(contextFile, channelDir);
 
 		// 检查是否隐藏思考过程
 		const hideThinking = (platformContext as any).isThinkingHidden?.() ?? true;
