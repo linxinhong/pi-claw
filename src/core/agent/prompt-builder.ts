@@ -94,7 +94,7 @@ export function buildSystemPrompt(
 	const skillsText =
 		skills.length > 0 ? formatSkillsForPrompt(skills) : "(no skills installed yet)";
 
-	return `You are pi-feishu, a platform-agnostic AI assistant. Be concise. No emojis.
+	const prompt = `You are pi-feishu, a platform-agnostic AI assistant. Be concise. No emojis.
 
 ## Context
 - For current date/time, use: date

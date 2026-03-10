@@ -21,6 +21,7 @@ import { join } from "path";
 import { getChannelDir } from "../../utils/config.js";
 import type { AgentContext } from "./context.js";
 import { buildSystemPrompt, loadMemoryContent, loadSkills } from "./prompt-builder.js";
+import { convertToMarkdown } from "./message-formatter.js";
 import type { ModelManager } from "../model/manager.js";
 import type { PlatformContext } from "../platform/context.js";
 import type { UniversalMessage } from "../platform/message.js";
@@ -692,6 +693,25 @@ export class CoreAgent {
 		// 检查是否隐藏思考过程
 		const hideThinking = (platformContext as any).isThinkingHidden?.() ?? true;
 
+		// 创建带 Markdown 转换和截断的 convertToLlm 函数
+		// 策略：将历史消息转换为 Markdown 格式，保留最近消息为原始格式
+		const maxMessages = 40;
+		const convertToLlmWithTruncation = (messages: Parameters<typeof convertToLlm>[0]): ReturnType<typeof convertToLlm> => {
+			// 使用 Markdown 转换（内部会调用 convertToLlm）
+			const converted = convertToMarkdown(messages, {
+				keepRecentMessages: 10, // 保留 5 轮对话
+				maxMarkdownLength: 10000,
+				includeToolResults: false,
+			});
+
+			// 最终截断到 maxMessages 条
+			if (converted.length > maxMessages) {
+				log.logInfo(`[Agent] Truncating messages from ${converted.length} to ${maxMessages}`);
+				return converted.slice(-maxMessages);
+			}
+			return converted;
+		};
+
 		// 创建 Agent
 		state.agent = new Agent({
 			initialState: {
@@ -700,7 +720,7 @@ export class CoreAgent {
 				thinkingLevel: hideThinking ? "off" : "medium",
 				tools,
 			},
-			convertToLlm,
+			convertToLlm: convertToLlmWithTruncation,
 			getApiKey: async () => getApiKeyForModel(model, state.modelRegistry!),
 		});
 
@@ -738,8 +758,8 @@ export class CoreAgent {
 		// 加载历史消息
 		const loadedSession = state.sessionManager.buildSessionContext();
 		if (loadedSession.messages.length > 0) {
-			// 截断到最后 50 条消息，避免输入超过 API 限制
-			const maxMessages = 50;
+			// 截断到最后 40 条消息，避免输入超过 API 限制
+			const maxMessages = 40;
 			const messages = loadedSession.messages.slice(-maxMessages);
 			state.agent.replaceMessages(messages);
 			log.logInfo(`[Agent] Loaded ${messages.length} messages from context (total: ${loadedSession.messages.length})`);
