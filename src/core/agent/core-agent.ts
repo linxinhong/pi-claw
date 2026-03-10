@@ -738,8 +738,11 @@ export class CoreAgent {
 		// 加载历史消息
 		const loadedSession = state.sessionManager.buildSessionContext();
 		if (loadedSession.messages.length > 0) {
-			state.agent.replaceMessages(loadedSession.messages);
-			log.logInfo(`[Agent] Loaded ${loadedSession.messages.length} messages from context`);
+			// 截断到最后 50 条消息，避免输入超过 API 限制
+			const maxMessages = 50;
+			const messages = loadedSession.messages.slice(-maxMessages);
+			state.agent.replaceMessages(messages);
+			log.logInfo(`[Agent] Loaded ${messages.length} messages from context (total: ${loadedSession.messages.length})`);
 		}
 
 		log.logInfo(`[Agent] Initialized for channel ${chatId} with model ${model.id}`);
