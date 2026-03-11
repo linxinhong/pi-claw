@@ -259,7 +259,7 @@ export class FeishuPlatformContext implements PlatformContext {
 				this.thinkingStartTime = Date.now();
 			}
 			const card = this.cardBuilder.buildStreamingCard(content, { timeline });
-			const messageId = await this.messageSender.sendCard(this.chatId, card);
+			const messageId = await this.messageSender.sendCard(this.chatId, card, this.quoteMessageId || undefined);
 			this.currentCardMessageId = messageId;
 			this.lastCardUpdateTime = Date.now();
 			this.currentCardStatus = "streaming";
@@ -289,7 +289,7 @@ export class FeishuPlatformContext implements PlatformContext {
 	 */
 	async showThinking(): Promise<string> {
 		const card = this.cardBuilder.buildThinkingCard();
-		const messageId = await this.messageSender.sendCard(this.chatId, card);
+		const messageId = await this.messageSender.sendCard(this.chatId, card, this.quoteMessageId || undefined);
 		this.currentCardMessageId = messageId;
 		this.currentCardStatus = "thinking";
 		return messageId;
@@ -332,7 +332,7 @@ export class FeishuPlatformContext implements PlatformContext {
 		// 创建新卡片
 		try {
 			const card = this.cardBuilder.buildStreamingCard(content, { timeline });
-			const messageId = await this.messageSender.sendCard(this.chatId, card);
+			const messageId = await this.messageSender.sendCard(this.chatId, card, this.quoteMessageId || undefined);
 			this.currentCardMessageId = messageId;
 			this.currentCardStatus = "streaming";
 		} catch (error: any) {
@@ -345,7 +345,7 @@ export class FeishuPlatformContext implements PlatformContext {
 			}
 			this.logger?.error("Failed to send card", undefined, error as Error);
 			// 发送失败，降级为文本消息（不是频率限制时才降级）
-			await this.messageSender.sendText(this.chatId, content);
+			await this.messageSender.sendText(this.chatId, content, this.quoteMessageId || undefined);
 		}
 	}
 
@@ -385,7 +385,7 @@ export class FeishuPlatformContext implements PlatformContext {
 		}
 
 		// 没有卡片或更新失败，发送文本
-		await this.messageSender.sendText(this.chatId, content);
+		await this.messageSender.sendText(this.chatId, content, this.quoteMessageId || undefined);
 		this.currentCardMessageId = null;
 		this.thinkingStartTime = null;
 		this.toolCalls = [];

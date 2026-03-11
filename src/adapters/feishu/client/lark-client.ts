@@ -285,7 +285,10 @@ export class LarkClient {
 		// 添加引用消息 ID
 		if (quoteMessageId) {
 			data.quote_message_id = quoteMessageId;
+			this.logger?.debug("Adding quote_message_id to card", { quoteMessageId });
 		}
+
+		this.logger?.debug("Sending card with data", { data: JSON.stringify(data, null, 2) });
 
 		const response = await this.client.im.v1.message.create({
 			params: {
