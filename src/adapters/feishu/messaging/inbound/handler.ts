@@ -106,8 +106,19 @@ export class MessageHandler {
 		// 缓存 mention 信息（用于 @ 功能）
 		if (context.mentions) {
 			for (const mention of context.mentions) {
-				if (mention.open_id && mention.name) {
-					this.larkClient.addUserToCache(context.chatId, mention.name, mention.open_id);
+				if (mention.open_id) {
+					// 获取真实用户名（替换 _user_5 这样的占位符）
+					let realName = mention.name;
+					if (!realName || realName.startsWith("_user_")) {
+						const userName = await this.larkClient.getUserName(mention.open_id);
+						if (userName) {
+							realName = userName;
+							mention.name = userName; // 更新 mention 的 name
+						}
+					}
+					if (realName) {
+						this.larkClient.addUserToCache(context.chatId, realName, mention.open_id);
+					}
 				}
 			}
 		}

@@ -770,10 +770,46 @@ export class LarkClient {
 	// User Cache for @mentions
 	// ========================================================================
 
-	/** 群成员缓存 */
-	private chatMembersCache = new Map<string, Map<string, string>>(); // chatId -> (name -> openId)
+	/** 群成员缓存 (name -> openId) */
+	private chatMembersCache = new Map<string, Map<string, string>>();
 	private chatMembersCacheTime = new Map<string, number>();
 	private readonly CHAT_MEMBERS_CACHE_TTL = 5 * 60 * 1000; // 5分钟
+
+	/** 用户真实姓名缓存 (openId -> realName) */
+	private userNameCache = new Map<string, string>();
+	private userNameCacheTime = new Map<string, number>();
+	private readonly USER_NAME_CACHE_TTL = 30 * 60 * 1000; // 30分钟
+
+	/**
+	 * 获取用户真实姓名
+	 * @param openId 用户 open_id
+	 */
+	async getUserName(openId: string): Promise<string | undefined> {
+		// 检查缓存
+		const cached = this.userNameCache.get(openId);
+		const cachedTime = this.userNameCacheTime.get(openId) ?? 0;
+		if (cached && Date.now() - cachedTime < this.USER_NAME_CACHE_TTL) {
+			return cached;
+		}
+
+		try {
+			const response = await this.client.contact.v3.user.get({
+				path: { user_id: openId },
+				params: { user_id_type: "open_id" },
+			});
+
+			if (response.code === 0 && response.data?.user?.name) {
+				const name = response.data.user.name;
+				this.userNameCache.set(openId, name);
+				this.userNameCacheTime.set(openId, Date.now());
+				return name;
+			}
+		} catch (error) {
+			this.logger?.warn("Failed to get user name", { openId, error: String(error) });
+		}
+
+		return undefined;
+	}
 
 	/**
 	 * 获取群成员列表（用于 @ 功能）
