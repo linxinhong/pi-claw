@@ -221,13 +221,7 @@ export class CardBuilder {
 	}): Card {
 		const elements: CardElement[] = [];
 
-		// 1. 先添加时间线折叠面板（思考过程在上方）
-		if (options?.timeline && options.timeline.length > 0) {
-			// 完成时折叠面板（expanded 默认为 false）
-			elements.push(this.buildTimelinePanel(options.timeline, options.expanded ?? false));
-		}
-
-		// 2. 再添加主要内容
+		// 1. 先添加主要内容
 		elements.push({
 			tag: "div",
 			text: {
@@ -235,6 +229,12 @@ export class CardBuilder {
 				content: this.formatContent(content),
 			},
 		});
+
+		// 2. 添加时间线折叠面板（思考过程在主要内容下方）
+		if (options?.timeline && options.timeline.length > 0) {
+			// 完成时折叠面板（expanded 默认为 false）
+			elements.push(this.buildTimelinePanel(options.timeline, options.expanded ?? false));
+		}
 
 		// 3. 最后添加页脚信息
 		if (options?.elapsed !== undefined) {
