@@ -256,7 +256,7 @@ export class LarkClient {
 		});
 
 		if (response.code !== 0) {
-			throw new Error(`Failed to send message: ${response.msg}`);
+			throw new Error(`Failed to send message: [${response.code}] ${response.msg}`);
 		}
 
 		const messageId = response.data?.message_id;
@@ -295,7 +295,7 @@ export class LarkClient {
 		});
 
 		if (response.code !== 0) {
-			throw new Error(`Failed to send card: ${response.msg}`);
+			throw new Error(`Failed to send card: [${response.code}] ${response.msg}`);
 		}
 
 		const messageId = response.data?.message_id;
@@ -322,7 +322,7 @@ export class LarkClient {
 		});
 
 		if (response.code !== 0) {
-			throw new Error(`Failed to update card: ${response.msg}`);
+			throw new Error(`Failed to update card: [${response.code}] ${response.msg}`);
 		}
 	}
 
@@ -342,7 +342,7 @@ export class LarkClient {
 		});
 
 		if (response.code !== 0) {
-			throw new Error(`Failed to update message: ${response.msg}`);
+			throw new Error(`Failed to update message: [${response.code}] ${response.msg}`);
 		}
 	}
 
@@ -359,7 +359,7 @@ export class LarkClient {
 		});
 
 		if (response.code !== 0) {
-			throw new Error(`Failed to delete message: ${response.msg}`);
+			throw new Error(`Failed to delete message: [${response.code}] ${response.msg}`);
 		}
 	}
 
@@ -374,7 +374,7 @@ export class LarkClient {
 		});
 
 		if (response.code !== 0) {
-			throw new Error(`Failed to get message: ${response.msg}`);
+			throw new Error(`Failed to get message: [${response.code}] ${response.msg}`);
 		}
 
 		return response.data;
@@ -398,7 +398,7 @@ export class LarkClient {
 		});
 
 		if (response.code !== 0) {
-			throw new Error(`Failed to send image: ${response.msg}`);
+			throw new Error(`Failed to send image: [${response.code}] ${response.msg}`);
 		}
 
 		const messageId = response.data?.message_id;
@@ -427,7 +427,7 @@ export class LarkClient {
 		});
 
 		if (response.code !== 0) {
-			throw new Error(`Failed to send file: ${response.msg}`);
+			throw new Error(`Failed to send file: [${response.code}] ${response.msg}`);
 		}
 
 		const messageId = response.data?.message_id;
@@ -458,7 +458,7 @@ export class LarkClient {
 		});
 
 		if (response.code !== 0) {
-			throw new Error(`Failed to reply in thread: ${response.msg}`);
+			throw new Error(`Failed to reply in thread: [${response.code}] ${response.msg}`);
 		}
 
 		const messageId = response.data?.message_id;
@@ -665,7 +665,7 @@ export class LarkClient {
 		});
 
 		if (response.code !== 0) {
-			throw new Error(`Failed to add reaction: ${response.msg}`);
+			throw new Error(`Failed to add reaction: [${response.code}] ${response.msg}`);
 		}
 	}
 
@@ -683,7 +683,7 @@ export class LarkClient {
 		});
 
 		if (response.code !== 0) {
-			throw new Error(`Failed to remove reaction: ${response.msg}`);
+			throw new Error(`Failed to remove reaction: [${response.code}] ${response.msg}`);
 		}
 	}
 
