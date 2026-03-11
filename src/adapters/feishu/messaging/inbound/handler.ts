@@ -104,13 +104,17 @@ export class MessageHandler {
 		const { content, attachments } = await this.parseContent(context);
 
 		// 缓存 mention 信息（用于 @ 功能）
+		this.logger?.debug("Processing mentions", { mentions: context.mentions });
 		if (context.mentions) {
 			for (const mention of context.mentions) {
+				this.logger?.debug("Processing mention", { mention });
 				if (mention.open_id) {
 					// 获取真实用户名（替换 _user_5 这样的占位符）
 					let realName = mention.name;
+					this.logger?.debug("Current mention name", { realName, open_id: mention.open_id });
 					if (!realName || realName.startsWith("_user_")) {
 						const userName = await this.larkClient.getUserName(mention.open_id);
+						this.logger?.debug("Fetched user name from API", { userName, open_id: mention.open_id });
 						if (userName) {
 							realName = userName;
 							mention.name = userName; // 更新 mention 的 name
@@ -118,6 +122,7 @@ export class MessageHandler {
 					}
 					if (realName) {
 						this.larkClient.addUserToCache(context.chatId, realName, mention.open_id);
+						this.logger?.debug("Added user to cache", { chatId: context.chatId, realName, open_id: mention.open_id });
 					}
 				}
 			}

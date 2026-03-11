@@ -886,16 +886,23 @@ export class LarkClient {
 	 * @param text 原始文本
 	 */
 	async convertAtMentions(chatId: string, text: string): Promise<string> {
+		this.logger?.debug("Converting @ mentions", { chatId, text, cacheSize: this.chatMembersCache.get(chatId)?.size });
 		const members = await this.getChatMembers(chatId);
+		this.logger?.debug("Chat members for conversion", { members: Array.from(members.entries()) });
 
 		// 替换 @用户名 为飞书格式
 		let result = text;
 		for (const [name, openId] of members.entries()) {
 			// 匹配 @用户名（前后有空格或字符串边界）
 			const regex = new RegExp(`@\\s*${this.escapeRegExp(name)}\\b`, "g");
+			const before = result;
 			result = result.replace(regex, `<at user_id="${openId}">@${name}</at>`);
+			if (result !== before) {
+				this.logger?.debug("Replaced mention", { name, openId, before, after: result });
+			}
 		}
 
+		this.logger?.debug("Converted result", { result });
 		return result;
 	}
 
