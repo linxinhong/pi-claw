@@ -507,6 +507,17 @@ export class FeishuPlatformContext implements PlatformContext {
 					timeline,
 					expanded: false,  // 完成时折叠
 				});
+				// 转换卡片内容中的 @用户名
+				if (finalCard?.body?.elements) {
+					for (const element of finalCard.body.elements) {
+						if (element.text?.content) {
+							element.text.content = await this.larkClient.convertAtMentions(this.chatId, element.text.content);
+						}
+						if (element.content) {
+							element.content = await this.larkClient.convertAtMentions(this.chatId, element.content);
+						}
+					}
+				}
 				await this.messageSender.updateCard(this.cardIds.toolCardId, finalCard);
 				// 标记响应已发送，防止 unified-bot 重复发送
 				this._responseSent = true;
