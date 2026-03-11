@@ -120,7 +120,9 @@ export class FeishuPlatformContext implements PlatformContext {
 	// ========================================================================
 
 	async sendText(chatId: string, text: string): Promise<string> {
-		return await this.messageSender.sendText(chatId, text);
+		// 转换 @用户名 为飞书格式
+		const convertedText = await this.larkClient.convertAtMentions(chatId, text);
+		return await this.messageSender.sendText(chatId, convertedText);
 	}
 
 	async updateMessage(messageId: string, content: string): Promise<void> {

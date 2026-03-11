@@ -103,6 +103,15 @@ export class MessageHandler {
 		// 解析消息内容
 		const { content, attachments } = await this.parseContent(context);
 
+		// 缓存 mention 信息（用于 @ 功能）
+		if (context.mentions) {
+			for (const mention of context.mentions) {
+				if (mention.open_id && mention.name) {
+					this.larkClient.addUserToCache(context.chatId, mention.name, mention.open_id);
+				}
+			}
+		}
+
 		// 提取提及的用户 ID
 		const mentions = context.mentions?.map((m) => m.open_id || m.user_id || "").filter(Boolean);
 
