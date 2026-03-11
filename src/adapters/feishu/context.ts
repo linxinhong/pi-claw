@@ -224,6 +224,13 @@ export class FeishuPlatformContext implements PlatformContext {
 		const content = this.pendingContent;
 		const timeline = this.getTimeline();
 
+		// 调试日志
+		console.log("[DEBUG] doFlushCardUpdate:", {
+			contentLength: content?.length || 0,
+			timelineCount: timeline?.length || 0,
+			timeline: timeline,
+		});
+
 		// 如果已有卡片，尝试更新
 		if (this.currentCardMessageId) {
 			try {
@@ -290,6 +297,13 @@ export class FeishuPlatformContext implements PlatformContext {
 	 */
 	async updateStreaming(content: string): Promise<void> {
 		const timeline = this.getTimeline();
+
+		// 调试日志
+		console.log("[DEBUG] updateStreaming:", {
+			contentLength: content?.length || 0,
+			timelineCount: timeline?.length || 0,
+			timeline: timeline,
+		});
 
 		// 如果已有卡片，尝试更新
 		if (this.currentCardMessageId) {
