@@ -10,7 +10,7 @@ import type { LarkClient } from "./client/index.js";
 import type { FeishuStore } from "./store.js";
 import type { MessageSender } from "./messaging/outbound/sender.js";
 import type { PiLogger } from "../../utils/logger/index.js";
-import type { ToolCallInfo, MultiCardIds, TimerState, TimelineEvent } from "./types.js";
+import type { ToolCallInfo, MultiCardIds, TimelineEvent } from "./types.js";
 import { CardBuilder } from "./card/builder.js";
 
 // ============================================================================
@@ -49,12 +49,6 @@ export class FeishuPlatformContext implements PlatformContext {
 		statusCardId: null,
 		thinkingCardId: null,
 		toolCardId: null,
-	};
-
-	// 计时器状态
-	private timerState: TimerState = {
-		startTime: null,
-		intervalId: null,
 	};
 
 	// 当前状态卡片（兼容旧接口）
@@ -392,13 +386,12 @@ export class FeishuPlatformContext implements PlatformContext {
 	// ========================================================================
 
 	/**
-	 * 开始思考（发送思考中卡片）
-	 * 创建状态卡片 + 思考卡片 + 启动计时器
+	 * 开始思考（发送工具卡片）
+	 * 只创建一张工具卡片（包含 timeline）
 	 */
 	async startThinking(): Promise<void> {
 		const now = Date.now();
 		this.thinkingStartTime = now;
-		this.timerState.startTime = now;
 
 		// 重置状态
 		this.hideThinking = false; // 允许显示思考内容
@@ -413,21 +406,13 @@ export class FeishuPlatformContext implements PlatformContext {
 			toolCardId: null,
 		};
 
-		// 创建状态卡片
-		const statusCard = this.cardBuilder.buildStatusCard(undefined, "processing");
-		const statusMessageId = await this.messageSender.sendCard(this.chatId, statusCard);
-		this.cardIds.statusCardId = statusMessageId;
-
-		// 创建思考卡片
-		const thinkingCard = this.cardBuilder.buildThinkingContentCard("💭 思考中...");
-		const thinkingMessageId = await this.messageSender.sendCard(this.chatId, thinkingCard);
-		this.cardIds.thinkingCardId = thinkingMessageId;
+		// 只创建一张工具卡片（初始为空）
+		const initialCard = this.cardBuilder.buildToolCallsCard([], []);
+		const messageId = await this.messageSender.sendCard(this.chatId, initialCard);
+		this.cardIds.toolCardId = messageId;
 
 		// 更新状态
 		this.currentCardStatus = "thinking";
-
-		// 启动计时器
-		this.startTimer();
 	}
 
 	/**
@@ -445,19 +430,21 @@ export class FeishuPlatformContext implements PlatformContext {
 			return;
 		}
 
-		// 如果没有思考卡片，创建一个
-		if (!this.cardIds.thinkingCardId) {
-			const thinkingCard = this.cardBuilder.buildThinkingContentCard("💭 思考中...");
-			const messageId = await this.messageSender.sendCard(this.chatId, thinkingCard);
-			this.cardIds.thinkingCardId = messageId;
-		}
-
 		// 累积思考内容
 		this.thinkingContent = content;
 
-		// 节流更新思考卡片
-		this.pendingContent = content;
-		await this.throttledThinkingCardUpdate();
+		// 更新工具卡片（包含思考内容的时间线）
+		if (this.cardIds.toolCardId) {
+			try {
+				const timeline = this.getTimeline();
+				const toolCard = this.cardBuilder.buildToolCallsCard(this.toolCalls, timeline);
+				await this.messageSender.updateCard(this.cardIds.toolCardId, toolCard);
+			} catch (error: any) {
+				if (error?.code !== 230020) {
+					this.logger?.error("Failed to update tool card with thinking", undefined, error as Error);
+				}
+			}
+		}
 	}
 
 	/**
@@ -465,38 +452,29 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * @param content 最终回复内容
 	 */
 	async finishThinking(content: string): Promise<void> {
-		// 停止计时器
-		this.stopTimer();
-
 		// 清理节流定时器
 		this.cleanupThrottle();
 
 		// 计算耗时
 		const elapsed = this.thinkingStartTime ? Date.now() - this.thinkingStartTime : undefined;
 
-		// 1. 更新状态卡片为完成状态
-		if (this.cardIds.statusCardId) {
+		// 获取时间线
+		const timeline = this.getTimeline();
+
+		// 更新工具卡片为最终结果（如果有工具调用）
+		if (this.cardIds.toolCardId && this.toolCalls.length > 0) {
 			try {
-				const statusCard = this.cardBuilder.buildStatusCard(elapsed, "complete");
-				await this.messageSender.updateCard(this.cardIds.statusCardId, statusCard);
+				const finalToolCard = this.cardBuilder.buildToolCallsCard(this.toolCalls, timeline);
+				await this.messageSender.updateCard(this.cardIds.toolCardId, finalToolCard);
 			} catch (error) {
-				this.logger?.error("Failed to update status card", undefined, error as Error);
+				this.logger?.error("Failed to update final tool card", undefined, error as Error);
 			}
 		}
 
-		// 2. 更新思考卡片为最终结果
-		if (this.cardIds.thinkingCardId) {
-			try {
-				const resultCard = this.cardBuilder.buildThinkingContentCard(content);
-				await this.messageSender.updateCard(this.cardIds.thinkingCardId, resultCard);
-			} catch (error) {
-				this.logger?.error("Failed to update thinking card", undefined, error as Error);
-			}
+		// 发送最终回复（作为新消息）
+		if (content) {
+			await this.messageSender.sendText(this.chatId, content);
 		}
-
-		// 3. 如果没有工具卡片，但有工具调用，创建工具卡片
-		// 如果有工具卡片，保持不变（工具调用已经在处理中更新）
-		// 注意：根据计划，完成后工具卡片保持（或删除如果没有工具调用）
 
 		// 清理状态
 		this.currentCardStatus = "complete";
@@ -508,9 +486,7 @@ export class FeishuPlatformContext implements PlatformContext {
 		this.pendingContent = "";
 		this._responseSent = true;
 
-		// 重置卡片 ID（保留清理逻辑）
-		// 注意：这里不重置 cardIds，因为卡片已经发送完成
-		// 下次 startThinking 会重新创建卡片
+		// 重置卡片 ID
 		this.cardIds = {
 			statusCardId: null,
 			thinkingCardId: null,
@@ -717,50 +693,8 @@ export class FeishuPlatformContext implements PlatformContext {
 	}
 
 	// ========================================================================
-	// Multi-Card Timer Methods
+	// Helper Methods
 	// ========================================================================
-
-	/**
-	 * 启动计时器
-	 */
-	private startTimer(): void {
-		this.timerState.startTime = Date.now();
-		this.timerState.intervalId = setInterval(async () => {
-			if (!this.timerState.startTime || !this.cardIds.statusCardId) return;
-			const elapsed = Date.now() - this.timerState.startTime;
-			await this.updateStatusCard(elapsed);
-		}, 1000);
-	}
-
-	/**
-	 * 停止计时器
-	 */
-	private stopTimer(): void {
-		if (this.timerState.intervalId) {
-			clearInterval(this.timerState.intervalId);
-			this.timerState.intervalId = null;
-		}
-		this.timerState.startTime = null;
-	}
-
-	/**
-	 * 更新状态卡片
-	 */
-	private async updateStatusCard(elapsed: number): Promise<void> {
-		if (!this.cardIds.statusCardId) return;
-
-		try {
-			const statusCard = this.cardBuilder.buildStatusCard(elapsed, "processing");
-			await this.messageSender.updateCard(this.cardIds.statusCardId, statusCard);
-		} catch (error: any) {
-			// 检查是否是速率限制错误 (230020)
-			if (error?.code === 230020) {
-				this.logger?.debug("Status card update rate limited, skipping");
-				return;
-			}
-			this.logger?.error("Failed to update status card", undefined, error as Error);
-		}
-	}
 
 	/**
 	 * 更新工具卡片
@@ -779,53 +713,6 @@ export class FeishuPlatformContext implements PlatformContext {
 				return;
 			}
 			this.logger?.error("Failed to update tool card", undefined, error as Error);
-		}
-	}
-
-	/**
-	 * 节流更新思考卡片
-	 */
-	private async throttledThinkingCardUpdate(): Promise<void> {
-		const now = Date.now();
-		const timeSinceLastUpdate = now - this.lastCardUpdateTime;
-
-		// 清除之前的待处理定时器
-		if (this.pendingFlushTimer) {
-			clearTimeout(this.pendingFlushTimer);
-			this.pendingFlushTimer = null;
-		}
-
-		// 如果距离上次更新超过节流时间，立即更新
-		if (timeSinceLastUpdate >= this.THROTTLE_MS) {
-			await this.doFlushThinkingCardUpdate();
-			return;
-		}
-
-		// 在节流窗口内，安排延迟更新
-		const delay = this.THROTTLE_MS - timeSinceLastUpdate;
-		this.pendingFlushTimer = setTimeout(async () => {
-			this.pendingFlushTimer = null;
-			await this.doFlushThinkingCardUpdate();
-		}, delay);
-	}
-
-	/**
-	 * 执行实际的思考卡片更新
-	 */
-	private async doFlushThinkingCardUpdate(): Promise<void> {
-		if (!this.pendingContent || !this.cardIds.thinkingCardId) return;
-
-		try {
-			const thinkingCard = this.cardBuilder.buildThinkingContentCard(this.pendingContent);
-			await this.messageSender.updateCard(this.cardIds.thinkingCardId, thinkingCard);
-			this.lastCardUpdateTime = Date.now();
-		} catch (error: any) {
-			// 检查是否是速率限制错误 (230020)
-			if (error?.code === 230020) {
-				this.logger?.debug("Thinking card update rate limited, skipping");
-				return;
-			}
-			this.logger?.error("Failed to update thinking card", undefined, error as Error);
 		}
 	}
 

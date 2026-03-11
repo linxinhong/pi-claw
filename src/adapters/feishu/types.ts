@@ -424,16 +424,6 @@ export interface MultiCardIds {
 }
 
 /**
- * 计时器状态
- */
-export interface TimerState {
-	/** 开始时间 */
-	startTime: number | null;
-	/** 定时器 ID */
-	intervalId: NodeJS.Timeout | null;
-}
-
-/**
  * 时间线事件
  */
 export interface TimelineEvent {
