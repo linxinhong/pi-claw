@@ -104,16 +104,18 @@ export class CardBuilder {
 	 * @param timeline 时间线事件列表（可选）
 	 */
 	buildToolCallsCard(toolCalls: ToolCallInfo[], timeline?: TimelineEvent[]): Card {
+		const hasTimeline = timeline && timeline.length > 0;
 		console.log("[CARD_TYPE] buildToolCallsCard - 工具调用卡片", {
 			toolCallsCount: toolCalls?.length || 0,
 			timelineCount: timeline?.length || 0,
+			hasTimeline: hasTimeline,
 		});
 		const elements: CardElement[] = [];
 
 		// 添加时间线折叠面板（如果有）
-		if (timeline && timeline.length > 0) {
+		if (hasTimeline) {
 			console.log("[CARD_TYPE] buildToolCallsCard: 使用时间线折叠面板");
-			elements.push(this.buildTimelinePanel(timeline));
+			elements.push(this.buildTimelinePanel(timeline!));
 		} else {
 			console.log("[CARD_TYPE] buildToolCallsCard: 使用旧的工具调用列表（无timeline）");
 			// 没有 timeline 时使用旧的工具调用列表

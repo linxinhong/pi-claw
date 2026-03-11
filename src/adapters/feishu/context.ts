@@ -568,7 +568,11 @@ export class FeishuPlatformContext implements PlatformContext {
 		try {
 			// 获取时间线并传入工具卡片
 			const timeline = this.getTimeline();
-			console.log("[DEBUG] updateOrCreateToolCard: timeline length =", timeline?.length || 0);
+			this.logger?.debug("[updateOrCreateToolCard]", {
+				toolCallsCount: this.toolCalls.length,
+				timelineCount: timeline?.length || 0,
+				timeline: timeline,
+			});
 			const toolCard = this.cardBuilder.buildToolCallsCard(this.toolCalls, timeline);
 
 			if (this.cardIds.toolCardId) {
