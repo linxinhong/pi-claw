@@ -203,10 +203,7 @@ export class CardBuilder {
 		return {
 			schema: "2.0",
 			config: this.defaultConfig,
-			header: {
-				title: { tag: "plain_text", content: "🤔 处理中..." },
-				template: "blue",
-			},
+			// 移除 header，让引用功能正常工作
 			body: { elements },
 		};
 	}

@@ -28,9 +28,10 @@
 
 3. **服务器拉取更新**
    ```bash
-   claw "cd ~/pi-claw && git pull"
+   claw "cd ~/pi-claw/ && git pull"
    ```
    - 通过 claw 命令在远程服务器执行 git pull
+   - `&&` 表示前一个命令成功后才执行后一个
    - 服务器路径：`~/pi-claw`
 
 ## 关于 `claw` 命令
@@ -76,6 +77,18 @@ claw "tail -50 ~/pi-claw/logs/pi-claw.error.log"
 
 # 实时监控日志
 claw "tail -f ~/pi-claw/logs/pi-claw.log"
+```
+
+### 常用命令示例
+```bash
+# 服务器拉取更新（&& 表示前一个命令成功后才执行后一个）
+claw "cd ~/pi-claw/ && git pull"
+
+# 查看服务器目录
+claw "ls -la ~/pi-claw/"
+
+# 重启服务（示例）
+claw "cd ~/pi-claw && npm restart"
 ```
 
 ## 前置条件
