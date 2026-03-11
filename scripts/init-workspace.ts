@@ -51,22 +51,32 @@ interface FileConfig {
 const FILES: FileConfig[] = [
 	// Boot 文件 - 只读配置
 	{
+		path: "boot/agents.md",
+		template: "boot/agents.md",
+		permissions: 0o600,
+		readonly: true,
+		replaceVars: true,
+	},
+	{
 		path: "boot/soul.md",
 		template: "boot/soul.md",
 		permissions: 0o600,
 		readonly: true,
+		replaceVars: true,
 	},
 	{
 		path: "boot/identity.md",
 		template: "boot/identity.md",
 		permissions: 0o600,
 		readonly: true,
+		replaceVars: true,
 	},
 	{
 		path: "boot/tools.md",
 		template: "boot/tools.md",
 		permissions: 0o600,
 		readonly: true,
+		replaceVars: true,
 	},
 
 	// Boot 文件 - 可编辑配置
@@ -74,6 +84,7 @@ const FILES: FileConfig[] = [
 		path: "boot/profile.md",
 		template: "boot/profile.md",
 		permissions: 0o644,
+		replaceVars: true,
 	},
 
 	// Memory 文件
@@ -138,6 +149,9 @@ function log(emoji: string, message: string): void {
 function replaceVariables(content: string): string {
 	return content
 		.replace(/\$\{WORKSPACE\}/g, WORKSPACE)
+		.replace(/\{workspaceDir\}/g, WORKSPACE)
+		.replace(/\{USER_MD\}/g, join(WORKSPACE, "boot", "user.md"))
+		.replace(/\{Platform\}/g, "飞书 (Feishu)")
 		.replace(/\$\{FEISHU_APP_ID\}/g, process.env.FEISHU_APP_ID || "your_app_id")
 		.replace(/\$\{FEISHU_APP_SECRET\}/g, process.env.FEISHU_APP_SECRET || "your_app_secret")
 		.replace(/\$\{FEISHU_MODEL:-([^}]+)\}/g, (_, defaultVal) => process.env.FEISHU_MODEL || defaultVal);
