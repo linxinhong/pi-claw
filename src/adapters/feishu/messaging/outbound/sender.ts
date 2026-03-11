@@ -7,6 +7,7 @@
 import type { UniversalResponse, CardContent } from "../../../../core/platform/message.js";
 import type { LarkClient } from "../../client/index.js";
 import type { PiLogger } from "../../../../utils/logger/index.js";
+import { normalizeAtMentions } from "../../utils/mention.js";
 
 // ============================================================================
 // Types
@@ -109,8 +110,10 @@ export class MessageSender {
 	 * @param quoteMessageId 可选的引用消息 ID，用于引用回复原消息
 	 */
 	async sendText(chatId: string, text: string, quoteMessageId?: string): Promise<string> {
-		this.logger?.debug("Sending text message", { chatId, length: text.length, quoteMessageId });
-		const result = await this.larkClient.sendText(chatId, text, quoteMessageId);
+		// 规范化 @提及标签（修复 AI 常写的错误格式）
+		const normalizedText = normalizeAtMentions(text);
+		this.logger?.debug("Sending text message", { chatId, length: normalizedText.length, quoteMessageId });
+		const result = await this.larkClient.sendText(chatId, normalizedText, quoteMessageId);
 		return result.message_id;
 	}
 
