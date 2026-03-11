@@ -892,13 +892,20 @@ export class LarkClient {
 
 		// 替换 @用户名 为飞书格式
 		let result = text;
+
+		// 先处理转义的 \@ -> @
+		result = result.replace(/\\@/g, "@");
+
 		for (const [name, openId] of members.entries()) {
-			// 匹配 @用户名（前后有空格或字符串边界）
-			const regex = new RegExp(`@\\s*${this.escapeRegExp(name)}\\b`, "g");
+			// 匹配 @用户名（支持 @_user_5 和 @姓名 格式）
+			// 使用单词边界或特殊字符作为分隔
+			const escapedName = this.escapeRegExp(name);
+			// 匹配 @name（name 后面跟着空格、标点或字符串结尾）
+			const regex = new RegExp(`@${escapedName}(?=[\\s\\n.,;:!?]|$)`, "g");
 			const before = result;
 			result = result.replace(regex, `<at user_id="${openId}">@${name}</at>`);
 			if (result !== before) {
-				this.logger?.debug("Replaced mention", { name, openId, before, after: result });
+				this.logger?.debug("Replaced mention", { name, openId, before: before.slice(0, 100), after: result.slice(0, 100) });
 			}
 		}
 

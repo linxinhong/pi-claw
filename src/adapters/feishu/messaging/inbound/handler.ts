@@ -120,9 +120,14 @@ export class MessageHandler {
 							mention.name = userName; // 更新 mention 的 name
 						}
 					}
+					// 缓存：同时缓存 key（如 @_user_1）和 name（如 Pi-Claw）
+					if (mention.key) {
+						this.larkClient.addUserToCache(context.chatId, mention.key, mention.open_id);
+						this.logger?.debug("Added mention key to cache", { chatId: context.chatId, key: mention.key, open_id: mention.open_id });
+					}
 					if (realName) {
 						this.larkClient.addUserToCache(context.chatId, realName, mention.open_id);
-						this.logger?.debug("Added user to cache", { chatId: context.chatId, realName, open_id: mention.open_id });
+						this.logger?.debug("Added user name to cache", { chatId: context.chatId, realName, open_id: mention.open_id });
 					}
 				}
 			}
