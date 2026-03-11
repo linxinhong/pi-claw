@@ -74,6 +74,10 @@ export class FeishuPlatformContext implements PlatformContext {
 	// 工具卡片创建锁（防止并发创建多张卡片）
 	private toolCardCreating: boolean = false;
 
+	// 工具卡片更新防抖
+	private toolCardUpdateTimer?: NodeJS.Timeout;
+	private readonly TOOL_CARD_DEBOUNCE_MS = 500; // 防抖时间
+
 	// 响应是否已发送标志
 	private _responseSent: boolean = false;
 
@@ -573,15 +577,36 @@ export class FeishuPlatformContext implements PlatformContext {
 
 	/**
 	 * 更新或创建工具卡片
-	 * 使用锁机制防止并发创建多张卡片
+	 * 使用防抖机制合并快速连续的更新请求
 	 */
 	private async updateOrCreateToolCard(): Promise<void> {
+		if (this.toolCalls.length === 0) return;
+
+		// 清除之前的待处理定时器
+		if (this.toolCardUpdateTimer) {
+			clearTimeout(this.toolCardUpdateTimer);
+		}
+
+		// 延迟更新，合并快速连续的调用
+		return new Promise((resolve) => {
+			this.toolCardUpdateTimer = setTimeout(async () => {
+				this.toolCardUpdateTimer = undefined;
+				await this.doUpdateOrCreateToolCard();
+				resolve();
+			}, this.TOOL_CARD_DEBOUNCE_MS);
+		});
+	}
+
+	/**
+	 * 实际执行工具卡片更新
+	 */
+	private async doUpdateOrCreateToolCard(): Promise<void> {
 		if (this.toolCalls.length === 0) return;
 
 		try {
 			// 获取时间线并传入工具卡片
 			const timeline = this.getTimeline();
-			this.logger?.debug("[updateOrCreateToolCard]", {
+			this.logger?.debug("[doUpdateOrCreateToolCard]", {
 				toolCallsCount: this.toolCalls.length,
 				timelineCount: timeline?.length || 0,
 				timeline: timeline,
