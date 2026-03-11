@@ -379,7 +379,7 @@ export class CoreAgent {
 
 			// 验证用户消息不为空
 			if (!userMessage || userMessage.trim().length === 0) {
-				log.logWarn("[Agent] Empty user message, skipping");
+				log.logWarning("[Agent] Empty user message, skipping");
 				return "_No response_";
 			}
 
@@ -840,7 +840,7 @@ export class CoreAgent {
 				const avgMsgLength = messagesLength / messages.length;
 				const maxAllowed = Math.max(5, Math.floor(targetLength / avgMsgLength));
 				finalMessages = messages.slice(-maxAllowed);
-				log.logWarn(`[Agent] Reducing messages from ${messages.length} to ${finalMessages.length} due to length limit`);
+				log.logWarning(`[Agent] Reducing messages from ${messages.length} to ${finalMessages.length} due to length limit`);
 			}
 
 			state.agent.replaceMessages(finalMessages);
@@ -992,7 +992,7 @@ export class CoreAgent {
 						data,
 					});
 				} catch (error) {
-					log.logWarning(`[Agent] Failed to read image: ${attachment.localPath}`);
+					log.logWarninging(`[Agent] Failed to read image: ${attachment.localPath}`);
 				}
 			}
 		}
