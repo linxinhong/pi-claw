@@ -104,10 +104,13 @@ export class MessageSender {
 
 	/**
 	 * 发送文本消息
+	 * @param chatId 聊天 ID
+	 * @param text 文本内容
+	 * @param quoteMessageId 可选的引用消息 ID，用于引用回复原消息
 	 */
-	async sendText(chatId: string, text: string): Promise<string> {
-		this.logger?.debug("Sending text message", { chatId, length: text.length });
-		const result = await this.larkClient.sendText(chatId, text);
+	async sendText(chatId: string, text: string, quoteMessageId?: string): Promise<string> {
+		this.logger?.debug("Sending text message", { chatId, length: text.length, quoteMessageId });
+		const result = await this.larkClient.sendText(chatId, text, quoteMessageId);
 		return result.message_id;
 	}
 

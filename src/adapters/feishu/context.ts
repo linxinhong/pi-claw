@@ -489,12 +489,16 @@ export class FeishuPlatformContext implements PlatformContext {
 				this.logger?.error("Failed to update final card", undefined, error as Error);
 				// 更新失败，降级发送文本（仅在最终回复时）
 				if (isFinalResponse && content) {
-					await this.messageSender.sendText(this.chatId, content);
+					await this.messageSender.sendText(this.chatId, content, this.quoteMessageId || undefined);
+					// 标记响应已发送，防止重复发送
+					this._responseSent = true;
 				}
 			}
 		} else if (isFinalResponse && content) {
 			// 没有卡片时才发送文本消息
-			await this.messageSender.sendText(this.chatId, content);
+			await this.messageSender.sendText(this.chatId, content, this.quoteMessageId || undefined);
+			// 标记响应已发送，防止重复发送
+			this._responseSent = true;
 		}
 
 		// 只有在最终回复时才清理状态
@@ -582,7 +586,7 @@ export class FeishuPlatformContext implements PlatformContext {
 				// 创建新卡片（加锁防止并发）
 				this.toolCardCreating = true;
 				try {
-					const messageId = await this.messageSender.sendCard(this.chatId, toolCard);
+					const messageId = await this.messageSender.sendCard(this.chatId, toolCard, this.quoteMessageId || undefined);
 					this.cardIds.toolCardId = messageId;
 				} finally {
 					this.toolCardCreating = false;

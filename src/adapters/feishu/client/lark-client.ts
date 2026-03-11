@@ -230,19 +230,29 @@ export class LarkClient {
 
 	/**
 	 * 发送文本消息
+	 * @param receiveId 接收者 ID
+	 * @param text 文本内容
+	 * @param quoteMessageId 可选的引用消息 ID，用于引用回复原消息
 	 */
-	async sendText(receiveId: string, text: string): Promise<FeishuSendResult> {
-		this.logger?.debug("Sending text message", { receiveId, textLength: text.length });
+	async sendText(receiveId: string, text: string, quoteMessageId?: string): Promise<FeishuSendResult> {
+		this.logger?.debug("Sending text message", { receiveId, textLength: text.length, quoteMessageId });
+
+		const data: any = {
+			receive_id: receiveId,
+			msg_type: "text",
+			content: JSON.stringify({ text }),
+		};
+
+		// 添加引用消息 ID
+		if (quoteMessageId) {
+			data.quote_message_id = quoteMessageId;
+		}
 
 		const response = await this.client.im.v1.message.create({
 			params: {
 				receive_id_type: "chat_id",
 			},
-			data: {
-				receive_id: receiveId,
-				msg_type: "text",
-				content: JSON.stringify({ text }),
-			},
+			data,
 		});
 
 		if (response.code !== 0) {
