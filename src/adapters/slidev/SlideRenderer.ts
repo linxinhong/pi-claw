@@ -6,7 +6,6 @@
 
 import type { SlideRendererConfig, SlideInfo, SlidevConfig } from "./types.js";
 import type { Logger } from "../../utils/logger/types.js";
-import "./types.browser.js";
 
 // ============================================================================
 // Slide Renderer
