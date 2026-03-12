@@ -492,10 +492,11 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * @param content 思考内容
 	 */
 	async updateThinking(content: string): Promise<void> {
-		console.log("[DEBUG] updateThinking called with:", content, "current thinkingContent:", this.thinkingContent);
+		console.log("[DEBUG] updateThinking called with:", content.slice(0, 50), "current thinkingContent:", this.thinkingContent.slice(0, 50));
+		
 		// 只有当内容有变化且非空时才添加到时间线
 		if (content && content !== this.thinkingContent) {
-			console.log("[DEBUG] Adding to timeline:");
+			console.log("[DEBUG] Adding to timeline");
 			this.addThinkingToTimeline(content);
 		}
 
@@ -507,19 +508,30 @@ export class FeishuPlatformContext implements PlatformContext {
 		// 累积思考内容
 		this.thinkingContent = content;
 
-		// 更新工具卡片（包含思考内容的时间线）
+		// 使用防抖更新工具卡片
 		if (this.cardIds.toolCardId) {
-			try {
-				const timeline = this.getTimeline();
-				// 思考过程中展开折叠面板
-				const toolCard = this.cardBuilder.buildToolCallsCard(this.toolCalls, timeline, true);
-				await this.messageSender.updateCard(this.cardIds.toolCardId, toolCard);
-			} catch (error: any) {
-				const errorMsg = String(error?.message || error);
-				if (!errorMsg.includes("230020") && error?.code !== 230020) {
-					this.logger?.error("Failed to update tool card with thinking", undefined, error as Error);
-				}
+			// 清除之前的定时器
+			if (this.toolCardUpdateTimer) {
+				clearTimeout(this.toolCardUpdateTimer);
 			}
+			
+			// 设置新的防抖定时器
+			this.toolCardUpdateTimer = setTimeout(async () => {
+				try {
+					const timeline = this.getTimeline();
+					// 思考过程中展开折叠面板
+					const toolCard = this.cardBuilder.buildToolCallsCard(this.toolCalls, timeline, true);
+					await this.messageSender.updateCard(this.cardIds.toolCardId!, toolCard);
+					console.log("[DEBUG] Tool card updated with thinking");
+				} catch (error: any) {
+					const errorMsg = String(error?.message || error);
+					if (!errorMsg.includes("230020") && error?.code !== 230020) {
+						this.logger?.error("Failed to update tool card with thinking", undefined, error as Error);
+					} else {
+						this.logger?.debug("Tool card update rate limited, skipping");
+					}
+				}
+			}, this.TOOL_CARD_DEBOUNCE_MS);
 		}
 	}
 
