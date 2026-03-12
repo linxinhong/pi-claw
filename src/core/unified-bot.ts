@@ -270,6 +270,47 @@ export class UnifiedBot {
 			}
 		}
 	}
+
+	/**
+	 * 初始化 MCP 管理器
+	 */
+	private initMcpManager(configManager?: ConfigManager): McpManager | null {
+		try {
+			// 从配置中获取 MCP 配置
+			let mcpConfig: McpConfig | undefined;
+			
+			if (configManager) {
+				const globalConfig = configManager.getGlobalConfig();
+				mcpConfig = globalConfig.mcp;
+			}
+
+			// 如果没有配置或禁用了 MCP，返回 null
+			if (!mcpConfig || mcpConfig.enabled === false) {
+				console.log("[UnifiedBot] MCP is disabled or not configured");
+				return null;
+			}
+
+			// 如果没有配置服务器，返回 null
+			if (!mcpConfig.servers || mcpConfig.servers.length === 0) {
+				console.log("[UnifiedBot] MCP servers not configured");
+				return null;
+			}
+
+			console.log(`[UnifiedBot] Initializing MCP manager with ${mcpConfig.servers.length} servers`);
+
+			// 创建 MCP 管理器
+			return createMcpManager({
+				servers: mcpConfig.servers,
+				clientInfo: {
+					name: "pi-claw",
+					version: "1.0.0",
+				},
+			});
+		} catch (error) {
+			console.error("[UnifiedBot] Failed to initialize MCP manager:", error);
+			return null;
+		}
+	}
 }
 
 /**

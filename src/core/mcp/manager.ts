@@ -387,11 +387,15 @@ export class McpManager {
 
     return {
       name: `mcp_${serverName}_${tool.name}`,
+      label: tool.name,
       description: this.buildToolDescription(tool, serverName),
       parameters: tool.inputSchema as Record<string, unknown>,
-      execute: async (args: Record<string, unknown>) => {
-        const result = await this.callTool(serverName, tool.name, args);
-        return result;
+      execute: async (toolCallId: string, params: Record<string, unknown>) => {
+        const result = await this.callTool(serverName, tool.name, params);
+        return {
+          content: [{ type: "text", text: result }],
+          details: result,
+        };
       },
       mcpMeta: {
         serverName,

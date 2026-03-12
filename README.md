@@ -179,6 +179,40 @@ pnpm run lock
 | memory | 记忆 | memory_save, memory_recall, memory_append_daily, memory_forget |
 | event | 调度 | 文件监听 + cron 支持 |
 | voice | 语音 | tts, voice, transcribe (插件) |
+| **mcp** | **MCP 客户端** | **连接外部 MCP 服务器** |
+
+## MCP 支持 (Beta)
+
+pi-claw 支持通过 [MCP (Model Context Protocol)](https://modelcontextprotocol.io) 接入外部工具和数据源：
+
+```json
+{
+  "mcp": {
+    "enabled": true,
+    "servers": [
+      {
+        "name": "filesystem",
+        "transport": "stdio",
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/dir"]
+      },
+      {
+        "name": "github",
+        "transport": "stdio",
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-github"],
+        "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}" }
+      }
+    ]
+  }
+}
+```
+
+接入的 MCP 工具会自动转换为 `mcp_{serverName}_{toolName}` 格式，例如：
+- `mcp_filesystem_read_file`
+- `mcp_github_search_repositories`
+
+详见 [MCP 集成指南](./docs/mcp-integration.md)。
 
 ## 架构说明
 

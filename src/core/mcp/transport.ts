@@ -109,7 +109,7 @@ export class StdioTransport implements McpTransport {
           reject(new Error(`Process exited with code ${code}`));
         }
         this.pendingRequests.clear();
-      };
+      });
 
       // 等待进程启动
       setTimeout(() => {
@@ -309,10 +309,11 @@ export class HttpSseTransport implements McpTransport {
         }
       };
 
-      this.eventSource.onclose = () => {
+      // EventSource 没有 onclose 事件，使用 onerror 检测连接关闭
+      this.eventSource.addEventListener("close", () => {
         this.connected = false;
         this.emitClose();
-      };
+      });
     });
   }
 

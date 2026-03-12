@@ -196,7 +196,7 @@ export class McpClient {
    * 获取服务器能力（工具、资源、Prompts）
    */
   private async fetchCapabilities(): Promise<void> {
-    const promises: Promise<void>[] = [];
+    const promises: Promise<unknown>[] = [];
 
     // 获取工具列表
     if (this.state.capabilities?.tools) {
@@ -412,7 +412,7 @@ export class McpClient {
         break;
       
       default:
-        log.logDebug(`[MCP Client ${this.config.name}] Unknown notification: ${notification.method}`);
+        log.logInfo(`[MCP Client ${this.config.name}] Unknown notification: ${notification.method}`);
     }
   }
 }
