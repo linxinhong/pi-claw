@@ -433,6 +433,12 @@ export class FeishuPlatformContext implements PlatformContext {
 				this.lastStreamingTimelineHash = ""; // 清空时间线哈希缓存
 				return;
 			} catch (error) {
+				// 检查是否是权限错误，如果是则重新抛出
+				const errorCode = (error as any)?.code ?? (error as any)?.response?.data?.code;
+				if (errorCode === 99991672) {
+					this.logger?.warn("Permission error in finishStatus, re-throwing");
+					throw error;
+				}
 				this.logger?.error("Failed to update final card", undefined, error as Error);
 				// 更新失败，继续发送文本
 			}
