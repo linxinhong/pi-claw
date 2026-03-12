@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Slidev Presentation</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+    
+    #app {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 24px;
+      background: rgba(15, 23, 42, 0.8);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+    }
+    
+    .header h1 {
+      font-size: 18px;
+      font-weight: 600;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    .header-controls {
+      display: flex;
+      gap: 12px;
+    }
+    
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 8px;
+      background: rgba(59, 130, 246, 0.2);
+      color: #3b82f6;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+    
+    .btn:hover {
+      background: rgba(59, 130, 246, 0.3);
+    }
+    
+    .btn.active {
+      background: #3b82f6;
+      color: white;
+    }
+    
+    /* Main Content */
+    .main {
+      flex: 1;
+      display: flex;
+      position: relative;
+    }
+    
+    /* Slide Container */
+    .slide-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      position: relative;
+    }
+    
+    .slide-content {
+      width: 100%;
+      max-width: 1200px;
+      aspect-ratio: 16/9;
+      background: #1e293b;
+      border-radius: 16px;
+      padding: 40px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      overflow: auto;
+    }
+    
+    .slide-content h1 {
+      font-size: 48px;
+      margin-bottom: 24px;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    .slide-content h2 {
+      font-size: 36px;
+      margin-bottom: 20px;
+      color: #f8fafc;
+    }
+    
+    .slide-content p {
+      font-size: 20px;
+      line-height: 1.6;
+      color: #94a3b8;
+    }
+    
+    .slide-content ul {
+      font-size: 20px;
+      line-height: 1.8;
+      color: #94a3b8;
+      margin-left: 24px;
+    }
+    
+    .slide-content li {
+      margin-bottom: 8px;
+    }
+    
+    /* Navigation Controls */
+    .nav-controls {
+      position: absolute;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 12px 24px;
+      background: rgba(15, 23, 42, 0.8);
+      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.1);
+    }
+    
+    .nav-btn {
+      width: 40px;
+      height: 40px;
+      border: none;
+      border-radius: 8px;
+      background: rgba(59, 130, 246, 0.2);
+      color: #3b82f6;
+      cursor: pointer;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    
+    .nav-btn:hover {
+      background: rgba(59, 130, 246, 0.3);
+    }
+    
+    .slide-indicator {
+      font-size: 14px;
+      color: #64748b;
+      min-width: 80px;
+      text-align: center;
+    }
+    
+    /* Chat Widget */
+    .chat-widget {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      width: 360px;
+      height: 480px;
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 16px;
+      border: 1px solid rgba(148, 163, 184, 0.1);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: transform 0.3s, opacity 0.3s;
+    }
+    
+    .chat-widget.collapsed {
+      transform: translateY(calc(100% - 60px));
+      opacity: 0.9;
+    }
+    
+    .chat-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    }
+    
+    .chat-header h3 {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    
+    .chat-toggle {
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+      font-size: 18px;
+    }
+    
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    
+    .chat-message {
+      max-width: 80%;
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    
+    .chat-message.user {
+      align-self: flex-end;
+      background: #3b82f6;
+      color: white;
+    }
+    
+    .chat-message.assistant {
+      align-self: flex-start;
+      background: rgba(148, 163, 184, 0.1);
+      color: #e2e8f0;
+    }
+    
+    .chat-input-area {
+      display: flex;
+      gap: 8px;
+      padding: 16px;
+      border-top: 1px solid rgba(148, 163, 184, 0.1);
+    }
+    
+    .chat-input {
+      flex: 1;
+      padding: 10px 16px;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 8px;
+      background: rgba(15, 23, 42, 0.5);
+      color: #e2e8f0;
+      font-size: 14px;
+      outline: none;
+    }
+    
+    .chat-input::placeholder {
+      color: #64748b;
+    }
+    
+    .chat-send {
+      width: 40px;
+      height: 40px;
+      border: none;
+      border-radius: 8px;
+      background: #3b82f6;
+      color: white;
+      cursor: pointer;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    /* Status Bar */
+    .status-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 24px;
+      background: rgba(15, 23, 42, 0.8);
+      border-top: 1px solid rgba(148, 163, 184, 0.1);
+      font-size: 12px;
+      color: #64748b;
+    }
+    
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #22c55e;
+    }
+    
+    .status-dot.paused {
+      background: #eab308;
+    }
+    
+    .status-dot.error {
+      background: #ef4444;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="header">
+      <h1>🎬 Slidev Presentation</h1>
+      <div class="header-controls">
+        <button class="btn" id="btn-start">开始</button>
+        <button class="btn" id="btn-voice">🎤 语音</button>
+        <button class="btn" id="btn-fullscreen">全屏</button>
+      </div>
+    </header>
+    
+    <!-- Main Content -->
+    <main class="main">
+      <div class="slide-container">
+        <div class="slide-content" id="slide-content">
+          <h1>欢迎使用 Slidev</h1>
+          <p>正在加载演示内容...</p>
+        </div>
+        
+        <!-- Navigation -->
+        <div class="nav-controls">
+          <button class="nav-btn" id="btn-prev">◀</button>
+          <span class="slide-indicator" id="slide-indicator">1 / 1</span>
+          <button class="nav-btn" id="btn-next">▶</button>
+        </div>
+      </div>
+    </main>
+    
+    <!-- Chat Widget -->
+    <div class="chat-widget" id="chat-widget">
+      <div class="chat-header">
+        <h3>💬 AI 助手</h3>
+        <button class="chat-toggle" id="chat-toggle">−</button>
+      </div>
+      <div class="chat-messages" id="chat-messages">
+        <div class="chat-message assistant">
+          你好！我是 AI 演示助手，可以帮你控制幻灯片或回答问题。
+        </div>
+      </div>
+      <div class="chat-input-area">
+        <input type="text" class="chat-input" id="chat-input" placeholder="输入消息...">
+        <button class="chat-send" id="chat-send">➤</button>
+      </div>
+    </div>
+    
+    <!-- Status Bar -->
+    <footer class="status-bar">
+      <div class="status-indicator">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-text">就绪</span>
+      </div>
+      <span id="connection-status">已连接</span>
+    </footer>
+  </div>
+  
+  <script>
+    // API 基础路径
+    const API_BASE = '/api/slidev';
+    
+    // 状态
+    let currentState = 'IDLE';
+    let currentSlide = { current: 1, total: 1 };
+    
+    // DOM 元素
+    const slideContent = document.getElementById('slide-content');
+    const slideIndicator = document.getElementById('slide-indicator');
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+    
+    // 初始化
+    async function init() {
+      await loadStatus();
+      await loadSlide();
+      setupEventListeners();
+      startPolling();
+    }
+    
+    // 加载状态
+    async function loadStatus() {
+      try {
+        const res = await fetch(`${API_BASE}/status`);
+        const data = await res.json();
+        if (data.success) {
+          currentState = data.data.state;
+          currentSlide = data.data.slide;
+          updateUI();
+        }
+      } catch (err) {
+        console.error('Failed to load status:', err);
+      }
+    }
+    
+    // 加载幻灯片
+    async function loadSlide() {
+      try {
+        const res = await fetch(`${API_BASE}/slide`);
+        const data = await res.json();
+        if (data.success) {
+          renderSlide(data.data);
+        }
+      } catch (err) {
+        console.error('Failed to load slide:', err);
+      }
+    }
+    
+    // 渲染幻灯片
+    function renderSlide(slide) {
+      slideContent.innerHTML = `
+        <h1>${slide.title || '无标题'}</h1>
+        <div>${formatContent(slide.content || '')}</div>
+      `;
+      slideIndicator.textContent = `${slide.current} / ${slide.total}`;
+    }
+    
+    // 格式化内容（简单的 Markdown 转换）
+    function formatContent(content) {
+      return content
+        .replace(/^#+ (.+)$/gm, '<h2>$1</h2>')
+        .replace(/^\- (.+)$/gm, '<li>$1</li>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        .replace(/\n/g, '<br>');
+    }
+    
+    // 更新 UI
+    function updateUI() {
+      statusText.textContent = currentState === 'PLAYING' ? '播放中' : 
+                               currentState === 'PAUSED' ? '已暂停' : 
+                               currentState === 'CONVERSING' ? '对话中' : '就绪';
+      statusDot.className = 'status-dot' + (currentState === 'PAUSED' ? ' paused' : '');
+    }
+    
+    // 导航
+    async function navigate(action, slideNo) {
+      try {
+        const body = { action };
+        if (slideNo) body.slideNo = slideNo;
+        
+        const res = await fetch(`${API_BASE}/navigate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        
+        const data = await res.json();
+        if (data.success) {
+          currentSlide = data.data.slide;
+          await loadSlide();
+        }
+      } catch (err) {
+        console.error('Navigation failed:', err);
+      }
+    }
+    
+    // 发送消息
+    async function sendMessage(content) {
+      try {
+        await fetch(`${API_BASE}/message`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content })
+        });
+        addMessage(content, 'user');
+      } catch (err) {
+        console.error('Failed to send message:', err);
+      }
+    }
+    
+    // 添加消息到聊天窗口
+    function addMessage(content, role) {
+      const messages = document.getElementById('chat-messages');
+      const msg = document.createElement('div');
+      msg.className = `chat-message ${role}`;
+      msg.textContent = content;
+      messages.appendChild(msg);
+      messages.scrollTop = messages.scrollHeight;
+    }
+    
+    // 设置事件监听
+    function setupEventListeners() {
+      // 导航按钮
+      document.getElementById('btn-prev').addEventListener('click', () => navigate('prev'));
+      document.getElementById('btn-next').addEventListener('click', () => navigate('next'));
+      
+      // 开始按钮
+      document.getElementById('btn-start').addEventListener('click', async () => {
+        await fetch(`${API_BASE}/control`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'start' })
+        });
+        await loadStatus();
+      });
+      
+      // 语音按钮
+      let voiceActive = false;
+      document.getElementById('btn-voice').addEventListener('click', async () => {
+        voiceActive = !voiceActive;
+        await fetch(`${API_BASE}/voice`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: voiceActive ? 'start' : 'stop' })
+        });
+        document.getElementById('btn-voice').classList.toggle('active', voiceActive);
+      });
+      
+      // 聊天折叠
+      const chatWidget = document.getElementById('chat-widget');
+      document.getElementById('chat-toggle').addEventListener('click', () => {
+        chatWidget.classList.toggle('collapsed');
+      });
+      
+      // 发送消息
+      const chatInput = document.getElementById('chat-input');
+      const doSend = () => {
+        const content = chatInput.value.trim();
+        if (content) {
+          sendMessage(content);
+          chatInput.value = '';
+        }
+      };
+      
+      document.getElementById('chat-send').addEventListener('click', doSend);
+      chatInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') doSend();
+      });
+      
+      // 键盘导航
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' || e.key === ' ') {
+          navigate('next');
+        } else if (e.key === 'ArrowLeft') {
+          navigate('prev');
+        }
+      });
+    }
+    
+    // 轮询状态
+    function startPolling() {
+      setInterval(loadStatus, 2000);
+    }
+    
+    // 启动
+    init();
+  </script>
+</body>
+</html>

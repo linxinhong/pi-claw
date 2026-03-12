@@ -30,36 +30,37 @@ export class WebSpeechTTSEngine implements TTSEngine {
       this.stop();
 
       // 创建新的 utterance
-      this.utterance = new SpeechSynthesisUtterance(text);
+      const SpeechSynthesisUtteranceClass = (globalThis as any).SpeechSynthesisUtterance;
+      this.utterance = new SpeechSynthesisUtteranceClass(text);
 
       // 应用配置
       if (config?.voice) {
         const voices = this.synthesis.getVoices();
-        const voice = voices.find(v => v.name === config.voice);
+        const voice = voices.find((v: SpeechSynthesisVoice) => v.name === config.voice);
         if (voice) {
-          this.utterance.voice = voice;
+          this.utterance!.voice = voice;
         }
       }
 
-      this.utterance.rate = config?.rate ?? 1;
-      this.utterance.pitch = config?.pitch ?? 1;
-      this.utterance.volume = config?.volume ?? 1;
+      this.utterance!.rate = config?.rate ?? 1;
+      this.utterance!.pitch = config?.pitch ?? 1;
+      this.utterance!.volume = config?.volume ?? 1;
 
       // 事件监听
-      this.utterance.onstart = () => {
+      this.utterance!.onstart = () => {
         this.speaking = true;
         this.paused = false;
         this.onStart?.();
       };
 
-      this.utterance.onend = () => {
+      this.utterance!.onend = () => {
         this.speaking = false;
         this.paused = false;
         this.onEnd?.();
         resolve();
       };
 
-      this.utterance.onerror = (event) => {
+      this.utterance!.onerror = (event: SpeechSynthesisErrorEvent) => {
         this.speaking = false;
         const error = new Error(`Speech synthesis error: ${event.error}`);
         this.onError?.(error);
@@ -67,7 +68,7 @@ export class WebSpeechTTSEngine implements TTSEngine {
       };
 
       // 开始播放
-      this.synthesis.speak(this.utterance);
+      this.synthesis.speak(this.utterance!);
     });
   }
 
@@ -155,7 +156,7 @@ export class DashscopeTTSEngine implements TTSEngine {
         throw new Error(`Dashscope API error: ${response.status}`);
       }
 
-      const data = await response.json();
+      const data = await response.json() as { output?: { audio_url?: string }; audio_url?: string };
       const audioUrl = data.output?.audio_url || data.audio_url;
 
       if (!audioUrl) {
@@ -197,27 +198,28 @@ export class DashscopeTTSEngine implements TTSEngine {
 
   private playAudio(url: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.audio = new Audio(url);
+      const AudioClass = (globalThis as any).Audio;
+      this.audio = new AudioClass(url);
 
-      this.audio.onplay = () => {
+      this.audio!.onplay = () => {
         this.speaking = true;
         this.onStart?.();
       };
 
-      this.audio.onended = () => {
+      this.audio!.onended = () => {
         this.speaking = false;
         this.onEnd?.();
         resolve();
       };
 
-      this.audio.onerror = (error) => {
+      this.audio!.onerror = (_error: ErrorEvent) => {
         this.speaking = false;
         const err = new Error("Audio playback error");
         this.onError?.(err);
         reject(err);
       };
 
-      this.audio.play();
+      this.audio!.play();
     });
   }
 }

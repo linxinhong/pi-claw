@@ -37,7 +37,7 @@ const StopSpeakingSchema = Type.Object({});
 export function createTTSTools(
   ttsEngine: TTSEngine,
   renderer: SlideRenderer
-): AgentTool<typeof SpeakSchema>[] {
+): AgentTool<any>[] {
 
   const speakTool: AgentTool<typeof SpeakSchema> = {
     name: "tts_speak",

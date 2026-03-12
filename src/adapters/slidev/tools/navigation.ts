@@ -33,7 +33,7 @@ const GetOutlineSchema = Type.Object({});
 export function createNavigationTools(
   renderer: SlideRenderer,
   stateMachine: StateMachine
-): AgentTool<typeof NavigateSchema>[] {
+): AgentTool<any>[] {
   
   const navigateTool: AgentTool<typeof NavigateSchema> = {
     name: "slide_navigate",

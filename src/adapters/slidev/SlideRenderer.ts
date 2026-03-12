@@ -5,23 +5,28 @@
  */
 
 import type { SlideRendererConfig, SlideInfo, SlidevConfig } from "./types.js";
+import type { Logger } from "../../utils/logger/types.js";
+import "./types.browser.js";
 
 // ============================================================================
 // Slide Renderer
 // ============================================================================
 
 export class SlideRenderer {
-  private container: HTMLElement;
+  private container: any;
   private config: SlideRendererConfig;
   private currentSlide: number = 1;
   private totalSlides: number = 0;
   private slidevInstance: any = null;
   private isInitialized: boolean = false;
+  private logger?: Logger;
 
-  constructor(config: SlideRendererConfig) {
+  constructor(config: SlideRendererConfig, logger?: Logger) {
     this.config = config;
     this.container = config.container;
     this.currentSlide = config.slidevConfig.initialSlide || 1;
+    this.logger = logger;
+    this.logger?.debug("[SlideRenderer] Created", { initialSlide: this.currentSlide });
   }
 
   // ============================================================================
@@ -36,6 +41,8 @@ export class SlideRenderer {
       return;
     }
 
+    this.logger?.info("[SlideRenderer] Initializing...");
+
     // 创建 Slidev 容器
     this.createContainer();
 
@@ -43,7 +50,7 @@ export class SlideRenderer {
     await this.loadSlidev();
 
     this.isInitialized = true;
-    console.log("[SlideRenderer] Initialized");
+    this.logger?.info("[SlideRenderer] Initialized", { totalSlides: this.totalSlides });
   }
 
   /**
@@ -53,6 +60,8 @@ export class SlideRenderer {
     if (!this.isInitialized) {
       return;
     }
+
+    this.logger?.info("[SlideRenderer] Destroying...");
 
     // 销毁 Slidev 实例
     if (this.slidevInstance) {
@@ -64,7 +73,7 @@ export class SlideRenderer {
     this.container.innerHTML = "";
 
     this.isInitialized = false;
-    console.log("[SlideRenderer] Destroyed");
+    this.logger?.info("[SlideRenderer] Destroyed");
   }
 
   // ============================================================================
@@ -96,11 +105,12 @@ export class SlideRenderer {
    */
   goto(slideNo: number): boolean {
     if (slideNo < 1 || slideNo > this.totalSlides) {
-      console.warn(`[SlideRenderer] Invalid slide number: ${slideNo}`);
+      this.logger?.warn(`[SlideRenderer] Invalid slide number: ${slideNo}`);
       return false;
     }
 
     this.currentSlide = slideNo;
+    this.logger?.debug(`[SlideRenderer] Goto slide ${slideNo}`);
 
     // 更新 Slidev
     this.updateSlidevSlide();
@@ -262,13 +272,15 @@ export class SlideRenderer {
         50% { box-shadow: 0 0 20px #3b82f6; }
       }
     `;
-    document.head.appendChild(style);
+    (document.head as any).appendChild(style);
   }
 
   private async loadSlidev(): Promise<void> {
     try {
-      // 动态导入 Slidev
-      const { createApp } = await import("@slidev/client");
+      this.logger?.info("[SlideRenderer] Loading Slidev...");
+
+      // 动态导入 Slidev（浏览器环境）
+      const { createApp } = await import("@slidev/client" as string) as any;
 
       // 解析 Markdown 源
       const slides = this.parseMarkdown(this.config.slidevConfig.source);
@@ -295,9 +307,9 @@ export class SlideRenderer {
       // 跳转到初始页
       this.goto(this.currentSlide);
 
-      console.log(`[SlideRenderer] Loaded ${this.totalSlides} slides`);
+      this.logger?.info(`[SlideRenderer] Loaded ${this.totalSlides} slides`);
     } catch (error) {
-      console.error("[SlideRenderer] Failed to load Slidev:", error);
+      this.logger?.error("[SlideRenderer] Failed to load Slidev", undefined, error as Error);
       throw error;
     }
   }
@@ -333,7 +345,7 @@ export class SlideRenderer {
 
   private setupSlideListeners(): void {
     // 监听键盘事件
-    this.container.addEventListener("keydown", (e) => {
+    this.container.addEventListener("keydown", (e: KeyboardEvent) => {
       switch (e.key) {
         case "ArrowRight":
         case "ArrowDown":
@@ -374,6 +386,6 @@ export class SlideRenderer {
 // Factory
 // ============================================================================
 
-export function createSlideRenderer(config: SlideRendererConfig): SlideRenderer {
-  return new SlideRenderer(config);
+export function createSlideRenderer(config: SlideRendererConfig, logger?: Logger): SlideRenderer {
+  return new SlideRenderer(config, logger);
 }

@@ -37,7 +37,7 @@ const AddNoteSchema = Type.Object({
 
 export function createEditorTools(
   renderer: SlideRenderer
-): AgentTool<typeof UpdateSlideSchema>[] {
+): AgentTool<any>[] {
 
   const updateSlideTool: AgentTool<typeof UpdateSlideSchema> = {
     name: "slide_update",

@@ -5,6 +5,7 @@
  */
 
 import type { AgentTool } from "@mariozechner/pi-agent-core";
+import "./types.browser.js";
 
 // ============================================================================
 // State Machine Types
@@ -61,8 +62,8 @@ export interface SlideInfo {
 
 /** 渲染器配置 */
 export interface SlideRendererConfig {
-  /** 容器元素 */
-  container: HTMLElement;
+  /** 容器元素（浏览器环境中为 HTMLElement） */
+  container: any;
   /** Slidev 配置 */
   slidevConfig: SlidevConfig;
   /** 页面变更回调 */
@@ -133,8 +134,8 @@ export interface STTEngine {
 
 /** Slidev Adapter 配置 */
 export interface SlidevAdapterConfig {
-  /** 容器元素 */
-  container: HTMLElement;
+  /** 容器元素（浏览器环境中为 HTMLElement） */
+  container: any;
   /** Slidev 配置 */
   slidev: SlidevConfig;
   /** TTS 配置 */

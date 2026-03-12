@@ -12,6 +12,7 @@ import type {
   StateChangeEvent, 
   StateMachineConfig 
 } from "./types.js";
+import type { Logger } from "../../utils/logger/types.js";
 
 // ============================================================================
 // State Transitions
@@ -34,10 +35,13 @@ export class StateMachine {
   private history: StateChangeEvent[] = [];
   private listeners: Set<(event: StateChangeEvent) => void> = new Set();
   private config: StateMachineConfig;
+  private logger?: Logger;
 
-  constructor(config: StateMachineConfig = {}) {
+  constructor(config: StateMachineConfig = {}, logger?: Logger) {
     this.config = config;
     this.currentState = config.initialState || "IDLE";
+    this.logger = logger;
+    this.logger?.debug("[StateMachine] Created", { initialState: this.currentState });
   }
 
   // ============================================================================
@@ -66,7 +70,7 @@ export class StateMachine {
 
     // 检查是否允许转换
     if (!this.canTransition(to)) {
-      console.warn(`[StateMachine] Invalid transition: ${from} -> ${to}`);
+      this.logger?.warn(`[StateMachine] Invalid transition: ${from} -> ${to}`);
       return false;
     }
 
@@ -87,7 +91,7 @@ export class StateMachine {
     // 触发回调
     this.notifyListeners(event);
 
-    console.log(`[StateMachine] ${from} -> ${to}`);
+    this.logger?.debug(`[StateMachine] ${from} -> ${to}`, context);
     return true;
   }
 
@@ -206,6 +210,6 @@ export class StateMachine {
 // Factory
 // ============================================================================
 
-export function createStateMachine(config?: StateMachineConfig): StateMachine {
-  return new StateMachine(config);
+export function createStateMachine(config?: StateMachineConfig, logger?: Logger): StateMachine {
+  return new StateMachine(config, logger);
 }

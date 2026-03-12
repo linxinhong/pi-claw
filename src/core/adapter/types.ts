@@ -4,6 +4,7 @@
  * 定义 Adapter 工厂接口和相关类型
  */
 
+import type { Express } from "express";
 import type { PlatformAdapter } from "../platform/adapter.js";
 import type { PlatformStore } from "../store/types.js";
 import type { PluginManager } from "../plugin/manager.js";
@@ -103,6 +104,13 @@ export interface AdapterFactory {
 	 * 可选：获取默认配置
 	 */
 	getDefaultConfig?(): Partial<BotConfig>;
+
+	/**
+	 * 可选：创建服务器路由（用于 Web 集成）
+	 * @param app Express 应用实例
+	 * @param config Bot 配置
+	 */
+	createServer?(app: Express, config: BotConfig): Promise<void>;
 }
 
 // ============================================================================
