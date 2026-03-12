@@ -455,8 +455,8 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * @param content 思考内容
 	 */
 	async updateThinking(content: string): Promise<void> {
-		// 添加到时间线（只在内容第一次更新时添加）
-		if (!this.thinkingContent && content) {
+		// 只有当内容有变化且非空时才添加到时间线
+		if (content && content !== this.thinkingContent) {
 			this.addThinkingToTimeline(content);
 		}
 
