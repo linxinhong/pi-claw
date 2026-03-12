@@ -8,3 +8,4 @@ export * from "./mention.js";
 export * from "./format.js";
 export * from "./file-type.js";
 export * from "./audio-utils.js";
+export * from "./permission-error.js";

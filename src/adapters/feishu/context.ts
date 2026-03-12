@@ -12,6 +12,7 @@ import type { MessageSender } from "./messaging/outbound/sender.js";
 import type { PiLogger } from "../../utils/logger/index.js";
 import type { ToolCallInfo, MultiCardIds, TimelineEvent } from "./types.js";
 import { CardBuilder } from "./card/builder.js";
+import { extractPermissionError, shouldNotifyPermissionError, sendAuthCard } from "./utils/permission-error.js";
 
 // ============================================================================
 // Types
@@ -963,5 +964,42 @@ export class FeishuPlatformContext implements PlatformContext {
 	async finalizeResponse(content: string): Promise<void> {
 		await this.finishStatus(content);
 		this._responseSent = true;
+	}
+
+	// ========================================================================
+	// Permission Error Handling
+	// ========================================================================
+
+	/**
+	 * 处理错误（包括权限错误）
+	 * @param error 错误对象
+	 * @returns 如果错误已处理（如发送授权卡片）返回 true，否则返回 false
+	 */
+	async handleError(error: unknown): Promise<boolean> {
+		// 尝试提取权限错误
+		const permissionError = extractPermissionError(error);
+		if (!permissionError) {
+			return false;
+		}
+
+		// 检查冷却时间
+		const appId = this.larkClient["config"]?.appId || "unknown";
+		if (!shouldNotifyPermissionError(appId)) {
+			this.logger?.debug("Skipping auth card due to cooldown", { appId });
+			return true;
+		}
+
+		// 发送授权卡片
+		try {
+			await sendAuthCard(this, permissionError);
+			this.logger?.info("Auth card sent", { 
+				code: permissionError.code, 
+				scopes: permissionError.scopes,
+			});
+			return true;
+		} catch (sendError) {
+			this.logger?.error("Failed to send auth card", undefined, sendError as Error);
+			return false;
+		}
 	}
 }

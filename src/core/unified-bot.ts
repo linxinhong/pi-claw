@@ -178,55 +178,76 @@ export class UnifiedBot {
 		const startTime = Date.now();
 		const chatId = message.chat.id;
 
-		// 获取上下文信息
-		const channelInfo = await this.adapter.getChannelInfo(chatId);
-		const ctx: LogContext = {
-			channelId: chatId,
-			channelName: channelInfo?.name,
-			userName: message.sender?.name,
-			platform: this.adapter.platform,
-		};
-
-		// 记录消息接收
-		logMessageReceive(ctx, message.content, message.id);
-
-		// 触发 MESSAGE_RECEIVE hook
-		const hookManager = getHookManager();
-		if (hookManager.hasHooks(HOOK_NAMES.MESSAGE_RECEIVE)) {
-			await hookManager.emit(HOOK_NAMES.MESSAGE_RECEIVE, {
-				channelId: message.chat.id,
-				messageId: message.id,
-				text: message.content,
-				userId: message.sender?.id,
-				userName: message.sender?.name,
-				timestamp: message.timestamp || new Date(),
-			});
-		}
-
 		// 创建平台上下文（传入消息 ID 用于引用回复）
 		const platformContext = this.adapter.createPlatformContext(message.chat.id, message.id);
 
-		// 处理消息
-		const response = await this.coreAgent.processMessage(message, platformContext, {
-			user: message.sender,
-			channels: await this.adapter.getAllChannels(),
-			users: await this.adapter.getAllUsers(),
-		});
+		try {
+			// 获取上下文信息
+			const channelInfo = await this.adapter.getChannelInfo(chatId);
+			const ctx: LogContext = {
+				channelId: chatId,
+				channelName: channelInfo?.name,
+				userName: message.sender?.name,
+				platform: this.adapter.platform,
+			};
 
-		// 发送响应
-		if (response) {
-			// 检查是否已经通过其他方式发送过响应
-			const alreadySent = platformContext.isResponseSent?.();
+			// 记录消息接收
+			logMessageReceive(ctx, message.content, message.id);
 
-			if (!alreadySent && platformContext.finalizeResponse) {
-				await platformContext.finalizeResponse(response);
-			} else if (!alreadySent) {
-				await platformContext.sendText(message.chat.id, response);
+			// 触发 MESSAGE_RECEIVE hook
+			const hookManager = getHookManager();
+			if (hookManager.hasHooks(HOOK_NAMES.MESSAGE_RECEIVE)) {
+				await hookManager.emit(HOOK_NAMES.MESSAGE_RECEIVE, {
+					channelId: message.chat.id,
+					messageId: message.id,
+					text: message.content,
+					userId: message.sender?.id,
+					userName: message.sender?.name,
+					timestamp: message.timestamp || new Date(),
+				});
 			}
 
-			// 记录回复
-			const duration = Date.now() - startTime;
-			logMessageReply(ctx, response.length, duration);
+			// 处理消息
+			const response = await this.coreAgent.processMessage(message, platformContext, {
+				user: message.sender,
+				channels: await this.adapter.getAllChannels(),
+				users: await this.adapter.getAllUsers(),
+			});
+
+			// 发送响应
+			if (response) {
+				// 检查是否已经通过其他方式发送过响应
+				const alreadySent = platformContext.isResponseSent?.();
+
+				if (!alreadySent && platformContext.finalizeResponse) {
+					await platformContext.finalizeResponse(response);
+				} else if (!alreadySent) {
+					await platformContext.sendText(message.chat.id, response);
+				}
+
+				// 记录回复
+				const duration = Date.now() - startTime;
+				logMessageReply(ctx, response.length, duration);
+			}
+		} catch (error) {
+			console.error("[UnifiedBot] Error handling message:", error);
+
+			// 尝试处理权限错误（发送授权卡片）
+			if (platformContext.handleError) {
+				const handled = await platformContext.handleError(error);
+				if (handled) {
+					console.log("[UnifiedBot] Permission error handled, auth card sent");
+					return;
+				}
+			}
+
+			// 如果不是权限错误或处理失败，发送通用错误消息
+			try {
+				const errorMessage = error instanceof Error ? error.message : String(error);
+				await platformContext.sendText(chatId, `❌ 处理消息时出错: ${errorMessage}`);
+			} catch (sendError) {
+				console.error("[UnifiedBot] Failed to send error message:", sendError);
+			}
 		}
 	}
 

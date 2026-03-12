@@ -134,6 +134,17 @@ export interface PlatformContext {
 	 * @param content 最终内容
 	 */
 	finalizeResponse?(content: string): Promise<void>;
+
+	/**
+	 * 处理错误（可选实现）
+	 *
+	 * 某些平台（如飞书）可能需要特殊处理错误，
+	 * 例如权限错误时发送授权卡片
+	 *
+	 * @param error 错误对象
+	 * @returns 如果错误已处理返回 true，否则返回 false
+	 */
+	handleError?(error: unknown): Promise<boolean>;
 }
 
 /**
