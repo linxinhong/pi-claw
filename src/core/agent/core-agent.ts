@@ -487,11 +487,8 @@ export class CoreAgent {
 						} else if (agentEvent.type === "message_update") {
 							// 处理 thinking 事件
 							const message = agentEvent.message as any;
-							console.log("[DEBUG] message_update received:", JSON.stringify(message.content, null, 2));
 							const thinkingContent = message.content?.find((c: any) => c.type === "thinking");
-							console.log("[DEBUG] thinkingContent:", thinkingContent);
 							if (thinkingContent && (platformContext as any).updateThinking) {
-								console.log("[DEBUG] Calling updateThinking with:", thinkingContent.thinking);
 								await (platformContext as any).updateThinking(thinkingContent.thinking);
 
 								// 触发 agent:thinking hook

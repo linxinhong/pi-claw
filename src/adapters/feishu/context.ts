@@ -795,7 +795,7 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * @param content 思考内容
 	 */
 	addThinkingToTimeline(content: string): void {
-		console.log("[DEBUG] addThinkingToTimeline called with:", content);
+		// addThinkingToTimeline 调试日志已禁用
 		// 截断思考内容（最多显示 50 个字符）
 		const truncated = content.length > 50 ? content.slice(0, 50) + "..." : content;
 
@@ -817,7 +817,7 @@ export class FeishuPlatformContext implements PlatformContext {
 				content: truncated,
 			});
 		}
-		console.log("[DEBUG] Timeline after add:", this.timeline);
+		// Timeline after add 调试日志已禁用
 	}
 
 	/**

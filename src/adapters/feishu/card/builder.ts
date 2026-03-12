@@ -168,7 +168,7 @@ export class CardBuilder {
 
 		// 1. 工具调用区域（如果有）
 		if (options?.toolCalls && options.toolCalls.length > 0) {
-			console.log("[DEBUG] Adding toolCalls to card body");
+			// 工具调用调试日志已禁用
 			elements.push(this.buildToolCallsList(options.toolCalls));
 		}
 
@@ -185,12 +185,10 @@ export class CardBuilder {
 
 		// 3. 时间线折叠面板（如果有）
 		if (options?.timeline && options.timeline.length > 0) {
-			console.log("[DEBUG] Building timeline panel with", options.timeline.length, "events");
 			const panel = this.buildTimelinePanel(options.timeline);
-			console.log("[DEBUG] Timeline panel built:", JSON.stringify(panel, null, 2));
 			elements.push(panel);
 		} else {
-			console.log("[DEBUG] No timeline to display (length:", options?.timeline?.length || 0, ")");
+			// 无时间线调试日志已禁用
 		}
 
 		// 4. 状态指示
@@ -328,11 +326,11 @@ export class CardBuilder {
 	 * @param expanded 是否展开（思考过程中展开，完成后折叠）
 	 */
 	buildTimelinePanel(timeline: TimelineEvent[], expanded: boolean = false): CardElement {
-		console.log("[DEBUG] buildTimelinePanel called with", timeline.length, "events, expanded:", expanded);
+		// buildTimelinePanel 调试日志已禁用
 
 		// 按 turn 分组
 		const turnGroups = this.groupByTurn(timeline);
-		console.log("[DEBUG] Turn groups:", Object.keys(turnGroups));
+		// Turn groups 调试日志已禁用
 
 		// 构建每轮的内容
 		const turnLines: string[] = [];
@@ -360,7 +358,7 @@ export class CardBuilder {
 			}
 		});
 
-		console.log("[DEBUG] Timeline content lines:", turnLines);
+		// Timeline content lines 调试日志已禁用
 
 		const panel = {
 			tag: "collapsible_panel",
@@ -390,7 +388,7 @@ export class CardBuilder {
 			}],
 		};
 
-		console.log("[DEBUG] Final panel structure:", JSON.stringify(panel, null, 2));
+		// Final panel structure 调试日志已禁用
 		return panel;
 	}
 
