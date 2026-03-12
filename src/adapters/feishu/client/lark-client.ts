@@ -571,7 +571,7 @@ export class LarkClient {
 		const fileStream = fs.createReadStream(filePath);
 
 		// 自动检测文件类型
-		const detectedType = (fileType || this.detectFileType(filePath)) as "opus" | "mp4" | "pdf" | "doc" | "xls" | "ppt" | "stream";
+		const detectedType = (fileType || await this.detectFileType(filePath)) as "opus" | "mp4" | "pdf" | "doc" | "xls" | "ppt" | "stream";
 
 		const response = await this.client.im.v1.file.create({
 			data: {
@@ -592,8 +592,8 @@ export class LarkClient {
 	/**
 	 * 检测文件类型
 	 */
-	private detectFileType(filePath: string): string {
-		const { extname } = require("path");
+	private async detectFileType(filePath: string): Promise<string> {
+		const { extname } = await import("path");
 		const ext = extname(filePath).toLowerCase();
 
 		const typeMap: Record<string, string> = {
