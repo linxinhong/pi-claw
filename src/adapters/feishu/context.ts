@@ -756,6 +756,15 @@ export class FeishuPlatformContext implements PlatformContext {
 		const argsStr = args ? this.formatToolArgs(args) : "";
 		const label = args?.label; // 提取 label
 
+		// 如果有 label，先添加一个描述性的 thinking 条目
+		if (label) {
+			this.timeline.push({
+				type: "thinking",
+				turn: this.currentTurn || 1,
+				content: label,
+			});
+		}
+
 		this.timeline.push({
 			type: "toolcall",
 			turn: this.currentTurn || 1,
