@@ -568,15 +568,38 @@ export class LarkClient {
 
 		const { default: fs } = await import("fs");
 		const { basename, extname } = await import("path");
+		const { pathToFileURL } = await import("url");
+		
+		// 检查文件是否存在（支持中文路径）
+		if (!fs.existsSync(filePath)) {
+			throw new Error(`File not found: ${filePath}`);
+		}
+		
+		// 使用 pathToFileURL 处理中文路径
+		const fileUrl = pathToFileURL(filePath).href;
 		const fileStream = fs.createReadStream(filePath);
 
 		// 自动检测文件类型
 		const detectedType = (fileType || await this.detectFileType(filePath)) as "opus" | "mp4" | "pdf" | "doc" | "xls" | "ppt" | "stream";
 
+		// 获取文件名（处理中文文件名）
+		let fileName = basename(filePath);
+		// 确保文件名编码正确
+		try {
+			// 如果文件名包含非法字符，使用简单名称
+			if (/[^\w\-\.\u4e00-\u9fa5]/.test(fileName)) {
+				// 保留扩展名，使用 "file" 作为基础名称
+				const ext = extname(fileName);
+				fileName = `file${ext}`;
+			}
+		} catch {
+			// 如果处理失败，使用原始名称
+		}
+
 		const response = await this.client.im.v1.file.create({
 			data: {
 				file_type: detectedType,
-				file_name: basename(filePath),
+				file_name: fileName,
 				file: fileStream,
 				...(duration && { duration }),
 			},

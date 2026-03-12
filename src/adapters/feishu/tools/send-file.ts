@@ -8,6 +8,7 @@ import type { PlatformTool } from "../../../core/platform/tools/types.js";
 import type { FeishuPlatformContext } from "../context.js";
 import { existsSync } from "fs";
 import { resolve } from "path";
+import { pathToFileURL } from "url";
 
 /**
  * 创建发送文件工具
@@ -41,10 +42,10 @@ export function createSendFileTool(context: FeishuPlatformContext): PlatformTool
 				let { file_path, description } = params;
 				const chatId = context["chatId"];
 
-				// 去除路径中的多余空格
-				file_path = file_path.trim();
+				// 去除路径中的多余空格和引号
+				file_path = file_path.trim().replace(/^["']|["']$/g, "");
 				
-				// 解析为绝对路径
+				// 解析为绝对路径（支持中文路径）
 				file_path = resolve(file_path);
 
 				// 检查文件是否存在
