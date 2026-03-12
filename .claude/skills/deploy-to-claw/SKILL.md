@@ -39,7 +39,7 @@
 
 ```bash
 # ~/.zshrc 或 ~/.bashrc 中的实际配置示例：
-alias claw='ssh user@hostname'
+alias claw='ssh root@8.166.130.56'
 
 # 实际使用时：
 claw "cd ~/pi-claw && git pull"

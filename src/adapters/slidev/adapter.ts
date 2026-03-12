@@ -18,16 +18,17 @@ import { PiLogger } from "../../utils/logger/index.js";
 import { SlidevPlatformContext } from "./context.js";
 import { StateMachine } from "./StateMachine.js";
 import { SlideRenderer } from "./SlideRenderer.js";
-import { WebSpeechTTSEngine } from "./TTSEngine.js";
+import { WebSpeechTTSEngine, createTTSEngine } from "./TTSEngine.js";
 import { createSTTEngine } from "./STTEngine.js";
 import type { 
   SlidevAdapterConfig, 
   PresentationState,
   SlidevConfig,
   TTSConfig,
-  STTConfig 
+  STTConfig,
+  TTSEngine,
+  ChatMessage,
 } from "./types.js";
-import type { ChatMessage } from "./types.js";
 
 // ============================================================================
 // Slidev Adapter
@@ -40,7 +41,7 @@ export class SlidevAdapter implements PlatformAdapter {
   private logger: Logger;
   private stateMachine: StateMachine;
   private renderer: SlideRenderer;
-  private ttsEngine: WebSpeechTTSEngine;
+  private ttsEngine: TTSEngine;
   private sttEngine: ReturnType<typeof createSTTEngine> | null = null;
   private platformContext: SlidevPlatformContext | null = null;
 
@@ -83,11 +84,17 @@ export class SlidevAdapter implements PlatformAdapter {
       },
     });
 
-    // 初始化 TTS 引擎
-    this.ttsEngine = new WebSpeechTTSEngine();
-    this.setupTTSEvents();
+    // 初始化 TTS 引擎（浏览器环境）
+    try {
+      this.ttsEngine = createTTSEngine(config.tts || { engine: "web-speech" });
+      this.setupTTSEvents();
+    } catch (error) {
+      this.logger.warn(`[SlidevAdapter] TTS not available (browser only): ${error}`);
+      // 创建 noop TTS 引擎
+      this.ttsEngine = this.createNoopTTSEngine();
+    }
 
-    // 初始化 STT 引擎
+    // 初始化 STT 引擎（浏览器环境）
     if (config.stt) {
       try {
         this.sttEngine = createSTTEngine(config.stt);
@@ -467,6 +474,21 @@ export class SlidevAdapter implements PlatformAdapter {
 
   private getMessages(): ChatMessage[] {
     return [...this.messages];
+  }
+
+  /**
+   * 创建 noop TTS 引擎（用于非浏览器环境）
+   */
+  private createNoopTTSEngine(): TTSEngine {
+    return {
+      speak: async () => {
+        this.logger.warn("[SlidevAdapter] TTS not available in server mode");
+      },
+      stop: () => {},
+      pause: () => {},
+      resume: () => {},
+      isSpeaking: () => false,
+    };
   }
 }
 

@@ -105,7 +105,8 @@ export const slidevAdapterFactory: AdapterFactory = {
   /**
    * 创建 Express 服务器路由
    * 
-   * 将 Slidev API 和静态文件服务添加到 Express 应用
+   * 将 Slidev 静态文件服务添加到 Express 应用
+   * 注意：服务器模式只提供静态页面，完整功能需要在浏览器环境使用
    */
   async createServer(app: Express, config: BotConfig): Promise<void> {
     const slidevConfig = config.slidev as SlidevAdapterConfig | undefined;
@@ -116,22 +117,24 @@ export const slidevAdapterFactory: AdapterFactory = {
 
     console.log("[SlidevAdapter] Setting up Express server...");
 
-    // 创建 Adapter（不启动，仅用于服务器模式）
-    const adapter = new SlidevAdapter(slidevConfig);
+    // 服务器模式：只提供静态文件服务
+    // 完整的 Adapter 功能需要在浏览器环境中创建
+    const { setupSlidevServer } = await import("./server/index.js");
+    
+    // 设置静态文件服务（不包含 API 路由，因为需要浏览器环境）
+    const { join, dirname } = await import("path");
+    const { fileURLToPath } = await import("url");
+    
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const staticPath = join(__dirname, "server", "static");
+    
+    app.use("/slidev", (await import("express")).static(staticPath));
+    
+    // 将 slidev 配置注入到静态页面（通过设置全局变量或模板替换）
+    // 这里简化处理，实际应用中可能需要更复杂的配置传递机制
 
-    // 初始化
-    await adapter.initialize({
-      platform: "slidev",
-      enabled: true,
-    });
-
-    // 设置服务器路由
-    setupSlidevServer({
-      app,
-      adapter,
-      logger: console as unknown as Logger,
-    });
-
+    console.log(`[SlidevAdapter] Static files served at /slidev from ${staticPath}`);
     console.log("[SlidevAdapter] Express server setup complete");
   },
 };

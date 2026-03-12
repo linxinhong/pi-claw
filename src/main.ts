@@ -20,6 +20,7 @@ import type { LogConfig } from "./utils/logger/index.js";
 import { getHookManager, HOOK_NAMES } from "./core/hook/index.js";
 import { ConfigManager } from "./core/config/manager.js";
 import { PluginManager, loadPlugins } from "./core/plugin/index.js";
+import express from "express";
 
 // 重新导出主要入口函数和类型（供外部使用）
 export type { SandboxConfig } from "./core/sandbox/index.js";
@@ -97,7 +98,11 @@ export async function main(options: MainOptions = {}): Promise<void> {
 	}
 
 	// 处理 port（CLI 参数优先）
-	const port = options.port || config.port;
+	const port = options.port || config.port || 3000;
+
+	// 创建 Express 应用（用于支持 createServer 的 adapter）
+	const app = express();
+	app.use(express.json());
 
 	// 1. 自动发现并加载所有 adapter
 	await loadAdapters();
@@ -150,6 +155,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
 
 	// 5. 为每个平台创建并启动 bot
 	const bots: Bot[] = [];
+	let hasServerAdapter = false;
 
 	for (const platform of platforms) {
 		const factory = adapterRegistry.get(platform);
@@ -171,18 +177,41 @@ export async function main(options: MainOptions = {}): Promise<void> {
 			[platform]: platformConfig, // 使用平台名作为键，保留嵌套结构
 		};
 
-		const bot = await factory.createBot(botConfig);
-		bots.push(bot);
+		// 如果 factory 支持 createServer，先设置服务器路由
+		if (factory.createServer) {
+			log.logInfo(`Setting up server for platform: ${platform}`);
+			await factory.createServer(app, botConfig);
+			hasServerAdapter = true;
+		}
 
-		log.logInfo(`Created bot for platform: ${platform}`);
+		// 如果 factory 支持 createBot，创建 bot
+		if (factory.createBot) {
+			try {
+				const bot = await factory.createBot(botConfig);
+				bots.push(bot);
+				log.logInfo(`Created bot for platform: ${platform}`);
+			} catch (error) {
+				log.logError(`Failed to create bot for platform ${platform}:`, error as Error);
+			}
+		}
 	}
 
-	// 5. 启动所有 bot（并行）
-	await Promise.all(bots.map((bot) => bot.start(port)));
+	// 6. 启动 HTTP 服务器（如果有 createServer 的 adapter）
+	let server: ReturnType<typeof app.listen> | undefined;
+	if (hasServerAdapter && port) {
+		server = app.listen(port, () => {
+			log.logInfo(`HTTP server running on port ${port}`);
+		});
+	}
+
+	// 7. 启动所有 bot（并行）
+	if (bots.length > 0) {
+		await Promise.all(bots.map((bot) => bot.start(port)));
+	}
 
 	log.logConnected(platforms);
 
-	// 6. 触发 system:ready hook（所有 bot 启动后）
+	// 8. 触发 system:ready hook（所有 bot 启动后）
 	if (hookManager.hasHooks(HOOK_NAMES.SYSTEM_READY)) {
 		await hookManager.emit(HOOK_NAMES.SYSTEM_READY, {
 			timestamp: new Date(),
@@ -191,9 +220,16 @@ export async function main(options: MainOptions = {}): Promise<void> {
 		});
 	}
 
-	// 7. 注册优雅关闭处理
+	// 10. 注册优雅关闭处理
 	const shutdown = async () => {
 		log.logInfo("Shutting down...");
+
+		// 关闭 HTTP 服务器
+		if (server) {
+			server.close(() => {
+				log.logInfo("HTTP server closed");
+			});
+		}
 
 		// 触发 system:shutdown hook
 		if (hookManager.hasHooks(HOOK_NAMES.SYSTEM_SHUTDOWN)) {
