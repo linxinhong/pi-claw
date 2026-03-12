@@ -921,19 +921,14 @@ export class LarkClient {
 				return name;
 			}
 		} catch (error: any) {
-			// 检查是否是权限错误 (code 99991672)
-			const errorCode = error?.code ?? error?.response?.data?.code;
-			const errorMsg = error?.msg ?? error?.response?.data?.msg ?? String(error);
+			// 使用统一的权限错误检测
+			const { extractPermissionError } = await import("../utils/permission-error.js");
+			const permError = extractPermissionError(error);
 			
-			if (errorCode === 99991672) {
-				this.logger?.warn("Permission denied for getUserName", { openId, errorMsg });
-				// 导入 permission-url 工具
-				const { extractPermissionGrantUrl, extractPermissionScopes } = await import("../utils/permission-url.js");
-				const grantUrl = extractPermissionGrantUrl(errorMsg);
-				const scopes = extractPermissionScopes(errorMsg);
-				
+			if (permError) {
+				this.logger?.warn("Permission denied for getUserName", { openId, errorMsg: permError.message });
 				// 返回特殊标记，让上层知道需要显示授权卡片
-				return `[PERMISSION_ERROR:scopes=${scopes}:url=${grantUrl}]`;
+				return `[PERMISSION_ERROR:scopes=${permError.scopes.join(",")}:url=${permError.grantUrl}]`;
 			}
 			
 			this.logger?.warn("Failed to get user name", { openId, error: String(error) });
@@ -975,16 +970,16 @@ export class LarkClient {
 			// 通过消息中已有的 mention 信息来建立映射
 			this.logger?.debug("Chat members fetch not fully implemented, using message mentions");
 		} catch (error: any) {
-			// 检查是否是权限错误 (code 99991672)
-			const errorCode = error?.code ?? error?.response?.data?.code;
-			const errorMsg = error?.msg ?? error?.response?.data?.msg ?? String(error);
+			// 使用统一的权限错误检测
+			const { extractPermissionError } = await import("../utils/permission-error.js");
+			const permError = extractPermissionError(error);
 			
-			if (errorCode === 99991672) {
-				console.error("[PERMISSION_ERROR] getChatMembers permission denied, throwing error:", errorMsg);
+			if (permError) {
+				console.error("[PERMISSION_ERROR] getChatMembers permission denied, throwing error:", permError.message);
 				// 重新抛出权限错误，让上层处理（发送授权卡片）
-				const permissionError = new Error(`Permission error: ${errorMsg}`);
+				const permissionError = new Error(`Permission error: ${permError.message}`);
 				(permissionError as any).code = 99991672;
-				(permissionError as any).response = { data: { code: 99991672, msg: errorMsg } };
+				(permissionError as any).response = { data: { code: 99991672, msg: permError.message } };
 				throw permissionError;
 			}
 			
