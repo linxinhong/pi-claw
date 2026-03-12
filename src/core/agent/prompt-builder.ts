@@ -281,6 +281,15 @@ ${memoryContent || "(no memory yet)"}
 		prompt += `## Tool Guidelines\n${bootContents.tools}\n\n`;
 	}
 
+	// 8. 工具调用 Label 指南（用于显示思考过程）
+	prompt += `## Tool Calling Guidelines
+When calling tools, add a "label" parameter to describe your intention. This helps track your thinking process:
+- Format: { "label": "简短描述你要做什么", "command": "..." }
+- Example: { "label": "查看当前目录文件", "command": "ls -la" }
+- The label should be concise (under 20 characters) and describe your current step
+
+`;
+
 	// 8. 历史对话（如果有）
 	if (historyMarkdown) {
 		prompt += `## Recent Conversation\n${historyMarkdown}\n\n`;
