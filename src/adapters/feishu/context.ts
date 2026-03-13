@@ -618,8 +618,14 @@ export class FeishuPlatformContext implements PlatformContext {
 		// 判断是否是最终回复
 		const isFinalResponse = stopReason === "stop" || stopReason === "end_turn";
 
+		// 只有最终回复时才更新卡片或发送消息
+		if (!isFinalResponse) {
+			// 非最终回复（如 toolUse），只更新时间线，不结束思考
+			this.logger?.debug(`[FeishuContext] Non-final stopReason: ${stopReason}, skipping finish`);
+			return;
+		}
+
 		// 如果有工具卡片，更新为完成状态（包含最终回复和时间线）
-		// 注意：只要 toolCardId 存在就更新卡片，不需要判断 toolCalls.length > 0
 		if (this.cardIds.toolCardId) {
 			try {
 				// 使用 buildCompleteCard 将最终回复和时间线整合到一个卡片中
@@ -657,14 +663,14 @@ export class FeishuPlatformContext implements PlatformContext {
 				if (!isRateLimit) {
 					this.logger?.error("Failed to update final card", undefined, error as Error);
 				}
-				// 更新失败，降级发送文本（仅在最终回复且不是频率限制时）
-				if (!isRateLimit && isFinalResponse && content) {
+				// 更新失败，降级发送文本（仅在不是频率限制时）
+				if (!isRateLimit && content) {
 					await this.messageSender.sendText(this.chatId, content, this.quoteMessageId || undefined);
 					// 标记响应已发送，防止重复发送
 					this._responseSent = true;
 				}
 			}
-		} else if (isFinalResponse && content) {
+		} else if (content) {
 			// 没有卡片时才发送文本消息
 			await this.messageSender.sendText(this.chatId, content, this.quoteMessageId || undefined);
 			// 标记响应已发送，防止重复发送
