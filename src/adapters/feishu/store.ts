@@ -25,6 +25,8 @@ export interface DownloadOptions {
 	channelId: string;
 	timestamp: string;
 	fileName?: string;
+	messageId?: string;
+	type?: "file" | "image";
 }
 
 // ============================================================================
@@ -137,14 +139,21 @@ export class FeishuStore implements PlatformStore {
 	 * 下载文件
 	 */
 	async downloadFile(options: DownloadOptions): Promise<string | null> {
-		const { fileKey, channelId, timestamp, fileName } = options;
+		const { fileKey, channelId, timestamp, fileName, messageId, type } = options;
 		const localPath = this.getAttachmentPath(channelId, timestamp, fileName || `file-${timestamp}`);
 		
-		console.log("[Feishu Store] Downloading file:", { fileKey, localPath });
+		console.log("[Feishu Store] Downloading file:", { fileKey, localPath, messageId });
 
 		try {
 			await this.ensureDir(dirname(localPath));
-			await this.larkClient.downloadFile(fileKey, localPath);
+			
+			// 如果有 messageId，使用 messageResource API（适用于音频、视频等）
+			if (messageId) {
+				await this.larkClient.downloadMessageResource(messageId, fileKey, localPath, type || "file");
+			} else {
+				await this.larkClient.downloadFile(fileKey, localPath);
+			}
+			
 			this.logger?.debug("File downloaded", { fileKey, localPath });
 			console.log("[Feishu Store] File downloaded successfully:", localPath);
 			return localPath;

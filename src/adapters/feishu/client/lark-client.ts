@@ -720,6 +720,41 @@ export class LarkClient {
 	}
 
 	/**
+	 * 下载消息资源（音频、视频、文件等）
+	 * 
+	 * 使用 messageResource API，需要 message_id 和 file_key
+	 */
+	async downloadMessageResource(
+		messageId: string,
+		fileKey: string,
+		localPath: string,
+		type: "file" | "image" = "file"
+	): Promise<void> {
+		this.logger?.debug("Downloading message resource", { messageId, fileKey, localPath, type });
+
+		// @ts-ignore - SDK 类型定义不完整
+		const response = await this.client.im.messageResource.get({
+			path: {
+				message_id: messageId,
+				file_key: fileKey,
+			},
+			params: {
+				type,
+			},
+		});
+
+		if (!response) {
+			throw new Error("Failed to download message resource: no response");
+		}
+
+		// 写入文件
+		const writeResult = response.writeFile?.(localPath);
+		if (writeResult) {
+			await writeResult;
+		}
+	}
+
+	/**
 	 * 下载图片
 	 */
 	async downloadImage(imageKey: string, localPath: string): Promise<void> {

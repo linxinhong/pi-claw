@@ -109,6 +109,8 @@ export async function convertAudioMessage(
 			channelId: context.chatId,
 			timestamp,
 			fileName,
+			messageId: context.messageId,
+			type: "file",
 		});
 	} catch (error: any) {
 		console.error("[Feishu] Failed to download audio:", error);
