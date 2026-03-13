@@ -34,6 +34,7 @@ import type { HookManager } from "../hook/manager.js";
 import { HOOK_NAMES } from "../hook/index.js";
 import type { ConfigManager } from "../config/manager.js";
 import type { McpManager } from "../mcp/manager.js";
+import type { PluginManager } from "../plugin/manager.js";
 
 // ============================================================================
 // Types
@@ -61,6 +62,8 @@ export interface AgentConfig {
 	eventsWatcher?: EventsWatcher;
 	/** MCP 管理器 */
 	mcpManager?: McpManager;
+	/** 插件管理器 */
+	pluginManager?: PluginManager;
 }
 
 /**
@@ -707,6 +710,52 @@ export class CoreAgent {
 				}
 			} catch (error) {
 				log.logError(`[Agent] Failed to load MCP tools: ${error}`);
+			}
+		}
+
+		// 添加插件工具
+		if (this.config.pluginManager) {
+			try {
+				// 构建插件上下文
+				const pluginContext = {
+					message: {
+						id: message.id,
+						text: message.content,
+						channel: chatId,
+						user: message.sender.id,
+						platform: platformContext.platform,
+						raw: message,
+					},
+					channel: chatId,
+					channelDir,
+					workspaceDir: workspacePath,
+					capabilities: {
+						platform: platformContext.platform,
+						chatId,
+						// 核心能力
+						sendVoiceMessage: (filePath: string) => platformContext.sendVoiceMessage(chatId, filePath),
+						// 可选能力（如果平台支持）
+						...(platformContext.setTyping && {
+							setTyping: () => platformContext.setTyping!(chatId, true),
+						}),
+						// hasCapability 辅助方法
+						hasCapability: (cap: string) => {
+							const caps: Record<string, boolean> = {
+								sendVoiceMessage: true,
+								setTyping: !!platformContext.setTyping,
+							};
+							return caps[cap] ?? false;
+						},
+					},
+					config: {},
+				};
+				const pluginTools = await this.config.pluginManager.getTools(pluginContext as any);
+				if (pluginTools && pluginTools.length > 0) {
+					baseTools.push(...pluginTools);
+					log.logInfo(`[Agent] Added ${pluginTools.length} plugin tools`);
+				}
+			} catch (error) {
+				log.logError(`[Agent] Failed to load plugin tools: ${error}`);
 			}
 		}
 

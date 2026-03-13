@@ -114,6 +114,7 @@ export class UnifiedBot {
 			hookManager: getHookManager(),
 			eventsWatcher: this.eventsWatcher,
 			mcpManager: this.mcpManager || undefined,
+			pluginManager: this.pluginManager,
 		});
 
 		// 设置模型变更回调：当模型切换时销毁 Agent 状态
