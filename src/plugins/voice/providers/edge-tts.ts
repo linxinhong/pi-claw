@@ -5,7 +5,7 @@
  * 基于 edge-tts 库实现
  */
 
-import type { TTSProvider, TTSOptions, TTSResult, TTSVoice } from "../../../core/voice/types.js";
+import type { TTSProvider, TTSOptions, TTSResult, TTSVoice } from "../types.js";
 import { writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";

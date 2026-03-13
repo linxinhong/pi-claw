@@ -5,7 +5,7 @@
  * API Docs: https://help.aliyun.com/zh/model-studio/developer-reference/qwen-tts
  */
 
-import type { TTSProvider, TTSOptions, TTSResult, TTSVoice } from "../../../core/voice/types.js";
+import type { TTSProvider, TTSOptions, TTSResult, TTSVoice } from "../types.js";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { join, dirname } from "path";

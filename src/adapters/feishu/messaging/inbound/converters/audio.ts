@@ -7,7 +7,7 @@
 import type { Attachment } from "../../../../../core/platform/message.js";
 import type { FeishuMessageContext } from "../../../types.js";
 import type { FeishuStore } from "../../../store.js";
-import { VoiceManager } from "../../../../../core/voice/manager.js";
+import { DashScopeSTT } from "../../../../../plugins/voice/providers/index.js";
 
 // ============================================================================
 // Types
@@ -144,15 +144,14 @@ export async function convertAudioMessage(
 		};
 	}
 
-	// 执行语音识别
-	const voiceManager = new VoiceManager();
+	// 执行语音识别（默认使用 DashScope）
+	const sttProvider = new DashScopeSTT();
 	let recognizedText: string;
 
 	try {
-		const result = await voiceManager.transcribe({
+		const result = await sttProvider.transcribe({
 			audioPath: localPath,
 			language: options?.language || "zh",
-			provider: options?.sttProvider || "dashscope", // 默认使用阿里云 DashScope
 		});
 		recognizedText = result.text;
 	} catch (error) {

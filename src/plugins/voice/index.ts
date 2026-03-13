@@ -9,7 +9,7 @@ import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { Type, Static } from "@sinclair/typebox";
 import * as log from "../../utils/logger/index.js";
 import { DashScopeTTS, EdgeTTS } from "./providers/index.js";
-import type { TTSProvider, STTProvider } from "../../core/voice/types.js";
+import type { TTSProvider, STTProvider } from "./types.js";
 
 // ============================================================================
 // Types
