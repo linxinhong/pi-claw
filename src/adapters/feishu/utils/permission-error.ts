@@ -42,14 +42,22 @@ export function extractPermissionError(err: unknown): PermissionError | null {
 	
 	// 处理嵌套数组格式（如 [[axiosError, feishuError]]）
 	if (Array.isArray(error)) {
-		// 展平一层嵌套数组
-		const flattened = error.flat();
-		// 查找包含 99991672 错误的对象
+		// 展平所有层级
+		const flattened = error.flat(Infinity);
+		
+		// 首先查找包含 code === 99991672 的对象
 		for (const item of flattened) {
-			if (item && typeof item === "object") {
-				const itemCode = item?.code || item?.response?.data?.code;
-				if (itemCode === 99991672) {
-					error = item;
+			if (item && typeof item === "object" && item.code === 99991672 && item.msg) {
+				error = item;
+				break;
+			}
+		}
+		
+		// 如果没找到，再查找包含 response?.data?.code === 99991672 的对象
+		if (error?.code !== 99991672) {
+			for (const item of flattened) {
+				if (item?.response?.data?.code === 99991672) {
+					error = item.response.data;
 					break;
 				}
 			}
@@ -57,8 +65,8 @@ export function extractPermissionError(err: unknown): PermissionError | null {
 	}
 	
 	// 检查是否是飞书 API 错误
-	const code = error?.code || error?.response?.data?.code;
-	const msg = error?.msg || error?.message || error?.response?.data?.msg;
+	const code = error?.code;
+	const msg = error?.msg;
 
 	// 飞书权限错误码
 	if (code !== 99991672) {
