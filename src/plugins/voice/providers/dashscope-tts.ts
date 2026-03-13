@@ -11,7 +11,8 @@ import { homedir } from "os";
 import { join, dirname } from "path";
 
 const TTS_API_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation";
-const TTS_MODEL = "qwen3-tts-instruct-flash";
+// 使用标准 TTS 模型（非 instruct 版本更简单，不需要 instructions 参数）
+const TTS_MODEL = "qwen3-tts-flash";
 
 interface ModelsConfig {
 	providers?: {
@@ -104,34 +105,37 @@ export class DashScopeTTS implements TTSProvider {
 		}
 
 		// 调用 DashScope TTS API
+		// 根据文档：https://help.aliyun.com/zh/model-studio/qwen-tts
+		// voice 和 language_type 应该在 input 中，不是 parameters
+		const requestBody: any = {
+			model: TTS_MODEL,
+			input: {
+				text,
+				voice,
+				language_type: "Auto", // 自动检测语言
+			},
+		};
+		
+		// 只有 instruct 模型才使用 instructions 参数
+		if (TTS_MODEL.includes("instruct") && options.speed) {
+			requestBody.parameters = {
+				instructions: `语速${options.speed > 1.0 ? "加快" : "减慢"}到${Math.round(options.speed * 100)}%`,
+				optimize_instructions: true,
+			};
+		}
+		
 		const response = await fetch(TTS_API_URL, {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
 				"Authorization": `Bearer ${apiKey}`,
 			},
-			body: JSON.stringify({
-				model: TTS_MODEL,
-				input: { text },
-				parameters: {
-					voice,
-					format: options.format === "opus" ? "opus" : "wav",
-					instructions: options.speed && options.speed !== 1.0
-						? `语速${options.speed > 1.0 ? "加快" : "减慢"}到${Math.round(options.speed * 100)}%`
-						: "语速正常，自然流畅",
-					optimize_instructions: true,
-				},
-			}),
+			body: JSON.stringify(requestBody),
 		});
 
 		if (!response.ok) {
 			const errorText = await response.text();
 			console.error(`[DashScope TTS] API error (${response.status}): ${errorText}`);
-			console.error(`[DashScope TTS] Request body:`, JSON.stringify({
-				model: TTS_MODEL,
-				input: { text: text.slice(0, 50) + (text.length > 50 ? "..." : "") },
-				parameters: { voice, format: options.format }
-			}));
 			throw new Error(`DashScope TTS API error (${response.status}): ${errorText}`);
 		}
 
