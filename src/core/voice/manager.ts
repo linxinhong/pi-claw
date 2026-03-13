@@ -13,10 +13,7 @@ import type {
 	STTOptions,
 	STTResult,
 } from "./types.js";
-import { EdgeTTS } from "./edge-tts.js";
-import { DashScopeTTS } from "./dashscope-tts.js";
-import { WhisperSTT } from "./whisper-stt.js";
-import { DashScopeSTT } from "./dashscope-stt.js";
+import { EdgeTTS, DashScopeTTS, WhisperSTT, DashScopeSTT } from "../../plugins/voice/providers/index.js";
 
 // ============================================================================
 // Voice Manager

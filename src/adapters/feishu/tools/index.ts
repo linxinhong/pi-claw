@@ -7,5 +7,3 @@
 export { createSendFileTool } from "./send-file.js";
 export { createSendImageTool } from "./send-image.js";
 export { createSendVoiceTool } from "./send-voice.js";
-export { createTTSTool, createListVoicesTool } from "./tts.js";
-export { createSTTTool } from "./stt.js";

@@ -1032,17 +1032,14 @@ export class FeishuPlatformContext implements PlatformContext {
 		channelDir: string;
 	}): Promise<PlatformTool[]> {
 		// 导入飞书特定工具
-		const { createSendFileTool, createSendImageTool, createSendVoiceTool, createTTSTool, createListVoicesTool, createSTTTool } = await import("./tools/index.js");
+		const { createSendFileTool, createSendImageTool, createSendVoiceTool } = await import("./tools/index.js");
 
 		return [
 			// 文件、图片和语音发送工具
 			createSendFileTool(this),
 			createSendImageTool(this),
 			createSendVoiceTool(this),
-			// TTS/STT 工具
-			createTTSTool(this),
-			createListVoicesTool(),
-			createSTTTool(),
+			// TTS/STT 工具由 voice 插件提供
 		];
 	}
 

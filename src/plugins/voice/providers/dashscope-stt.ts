@@ -5,7 +5,7 @@
  * API Docs: https://help.aliyun.com/zh/model-studio/developer-reference/qwen-asr
  */
 
-import type { STTProvider, STTOptions, STTResult } from "./types.js";
+import type { STTProvider, STTOptions, STTResult } from "../../../core/voice/types.js";
 import { existsSync, readFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";

@@ -1,7 +1,8 @@
 /**
  * Voice Module
  *
- * TTS/STT 语音模块入口
+ * TTS/STT 语音模块入口 - 保留类型和 Manager 供兼容性使用
+ * 实际的 Providers 已移到 plugins/voice/providers/
  */
 
 // Types
@@ -17,13 +18,7 @@ export type {
 	STTSegment,
 } from "./types.js";
 
-// Providers
-export { EdgeTTS } from "./edge-tts.js";
-export { DashScopeTTS } from "./dashscope-tts.js";
-export { WhisperSTT } from "./whisper-stt.js";
-export { DashScopeSTT } from "./dashscope-stt.js";
-
-// Manager
+// Manager - 保留供现有代码使用
 export { VoiceManager, getVoiceManager, setVoiceManager } from "./manager.js";
 
 // Utils

@@ -4,7 +4,7 @@
  * 使用 OpenAI Whisper 或本地 whisper.cpp 进行语音识别
  */
 
-import type { STTProvider, STTOptions, STTResult, STTSegment } from "./types.js";
+import type { STTProvider, STTOptions, STTResult, STTSegment } from "../../../core/voice/types.js";
 
 // ============================================================================
 // Whisper STT Implementation
