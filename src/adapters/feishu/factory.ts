@@ -6,7 +6,7 @@
 
 import { join } from "path";
 import { UnifiedBot } from "../../core/unified-bot.js";
-import { PluginManager } from "../../core/plugin/manager.js";
+import { PluginManager, loadPlugins } from "../../core/plugin/index.js";
 import { ConfigManager } from "../../core/config/manager.js";
 import { getHookManager } from "../../core/hook/index.js";
 import { PiLogger } from "../../utils/logger/index.js";
@@ -78,6 +78,9 @@ export async function createFeishuBot(config: BotConfig & { feishu: FeishuAdapte
 
 	// 设置 HookManager
 	pluginManager.setHookManager(getHookManager());
+
+	// 加载插件（根据配置）\t
+	await loadPlugins(pluginManager, pluginsConfig);
 
 	// 初始化插件
 	await pluginManager.initialize({
