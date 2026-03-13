@@ -152,7 +152,7 @@ export async function convertAudioMessage(
 		const result = await voiceManager.transcribe({
 			audioPath: localPath,
 			language: options?.language || "zh",
-			provider: options?.sttProvider,
+			provider: options?.sttProvider || "dashscope", // 默认使用阿里云 DashScope
 		});
 		recognizedText = result.text;
 	} catch (error) {
