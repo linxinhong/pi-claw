@@ -290,10 +290,12 @@ export class MessageHandler {
 				break;
 
 			case "audio":
+				console.log("[Feishu Handler] Processing audio message, type:", context.messageType);
 				result = await convertAudioMessage(context.content, context, this.store, {
 					sttProvider: this.config.stt?.provider,
 					language: this.config.stt?.language,
 				});
+				console.log("[Feishu Handler] Audio conversion result:", result);
 				break;
 
 			default:

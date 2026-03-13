@@ -139,14 +139,18 @@ export class FeishuStore implements PlatformStore {
 	async downloadFile(options: DownloadOptions): Promise<string | null> {
 		const { fileKey, channelId, timestamp, fileName } = options;
 		const localPath = this.getAttachmentPath(channelId, timestamp, fileName || `file-${timestamp}`);
+		
+		console.log("[Feishu Store] Downloading file:", { fileKey, localPath });
 
 		try {
 			await this.ensureDir(dirname(localPath));
 			await this.larkClient.downloadFile(fileKey, localPath);
 			this.logger?.debug("File downloaded", { fileKey, localPath });
+			console.log("[Feishu Store] File downloaded successfully:", localPath);
 			return localPath;
 		} catch (error: any) {
 			this.logger?.error("Failed to download file", undefined, error as Error);
+			console.error("[Feishu Store] Failed to download file:", error);
 			
 			// 检测权限错误并抛出，让上层处理
 			const errorStr = JSON.stringify(error);

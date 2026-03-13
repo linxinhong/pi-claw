@@ -84,9 +84,14 @@ export async function convertAudioMessage(
 		language?: string;
 	}
 ): Promise<{ content: string; attachments?: Attachment[] }> {
+	console.log("[Feishu Audio] Starting audio conversion, content:", content);
+	
 	// 解析音频消息内容
 	const audioInfo = parseAudioContent(content);
+	console.log("[Feishu Audio] Parsed audio info:", audioInfo);
+	
 	if (!audioInfo) {
+		console.log("[Feishu Audio] Failed to parse audio content");
 		return { content: "[语音消息]" };
 	}
 
