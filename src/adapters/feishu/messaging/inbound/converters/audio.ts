@@ -8,7 +8,6 @@ import type { Attachment } from "../../../../../core/platform/message.js";
 import type { FeishuMessageContext } from "../../../types.js";
 import type { FeishuStore } from "../../../store.js";
 import { VoiceManager } from "../../../../../core/voice/manager.js";
-import { extractPermissionError } from "../../../utils/permission-error.js";
 
 // ============================================================================
 // Types
@@ -106,14 +105,20 @@ export async function convertAudioMessage(
 			timestamp,
 			fileName,
 		});
-	} catch (error) {
+	} catch (error: any) {
 		console.error("[Feishu] Failed to download audio:", error);
 		
-		// 检测权限错误
-		const permissionError = extractPermissionError(error);
-		if (permissionError) {
+		// 检测权限错误 - 直接检查错误码 99991672
+		const errorStr = JSON.stringify(error);
+		const codeMatch = errorStr.match(/"code":\s*(99991672)/);
+		const urlMatch = errorStr.match(/(https:\/\/open\.feishu\.cn\/app\/[^"\s]+)/);
+		
+		if (codeMatch && urlMatch) {
+			// 提取权限列表
+			const scopeMatch = errorStr.match(/\[([^\]]*contact:[^\]]*)\]/);
+			const scopes = scopeMatch ? scopeMatch[1] : "im:resource";
 			return {
-				content: `[PERMISSION_ERROR:scopes=${permissionError.scopes.join(",")}:url=${permissionError.grantUrl}]`,
+				content: `[PERMISSION_ERROR:scopes=${scopes}:url=${urlMatch[1]}]`,
 			};
 		}
 		
