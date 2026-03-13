@@ -8,6 +8,7 @@ import type { Attachment } from "../../../../../core/platform/message.js";
 import type { FeishuMessageContext } from "../../../types.js";
 import type { FeishuStore } from "../../../store.js";
 import { VoiceManager } from "../../../../../core/voice/manager.js";
+import { extractPermissionError } from "../../../utils/permission-error.js";
 
 // ============================================================================
 // Types
@@ -107,6 +108,15 @@ export async function convertAudioMessage(
 		});
 	} catch (error) {
 		console.error("[Feishu] Failed to download audio:", error);
+		
+		// 检测权限错误
+		const permissionError = extractPermissionError(error);
+		if (permissionError) {
+			return {
+				content: `[PERMISSION_ERROR:scopes=${permissionError.scopes.join(",")}:url=${permissionError.grantUrl}]`,
+			};
+		}
+		
 		return {
 			content: durationStr
 				? `[语音消息 ${durationStr} - 下载失败]`

@@ -269,31 +269,46 @@ export class MessageHandler {
 	 */
 	private async parseContent(context: FeishuMessageContext): Promise<{ content: string; attachments?: Attachment[] }> {
 		const messageType = context.messageType;
+		let result: { content: string; attachments?: Attachment[] };
 
 		switch (messageType) {
 			case "text":
-				return convertTextMessage(context.content);
+				result = convertTextMessage(context.content);
+				break;
 
 			case "post":
-				return convertPostMessage(context.content);
+				result = convertPostMessage(context.content);
+				break;
 
 			case "image":
-				return await convertImageMessage(context.content, context, this.store);
+				result = await convertImageMessage(context.content, context, this.store);
+				break;
 
 			case "file":
 			case "media":
-				return await convertFileMessage(context.content, context, this.store);
+				result = await convertFileMessage(context.content, context, this.store);
+				break;
 
 			case "audio":
-				return await convertAudioMessage(context.content, context, this.store, {
+				result = await convertAudioMessage(context.content, context, this.store, {
 					sttProvider: this.config.stt?.provider,
 					language: this.config.stt?.language,
 				});
+				break;
 
 			default:
 				// 尝试作为文本处理
-				return convertTextMessage(context.content);
+				result = convertTextMessage(context.content);
 		}
+
+		// 检测权限错误并发送授权卡片
+		const permissionMatch = result.content.match(/\[PERMISSION_ERROR:scopes=([^:]+):url=([^\]]+)\]/);
+		if (permissionMatch) {
+			await this.sendPermissionCard(context.chatId, permissionMatch[1], permissionMatch[2]);
+			return { content: "[需要授权]" };
+		}
+
+		return result;
 	}
 
 	/**
