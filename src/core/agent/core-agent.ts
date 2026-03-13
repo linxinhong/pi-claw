@@ -663,6 +663,8 @@ export class CoreAgent {
 		const { createGrepTool } = await import("../tools/grep.js");
 		const { createSpawnTool } = await import("../tools/spawn/index.js");
 		const { createRtkTool } = await import("../tools/rtk.js");
+		const { createWebSearchTool } = await import("../tools/web-search.js");
+		const { createWebReaderTool } = await import("../tools/web-reader.js");
 
 		// 先创建基础工具（不包括 spawn，因为 spawn 需要知道 parentTools）
 		const baseTools: AgentTool<any>[] = [
@@ -678,6 +680,9 @@ export class CoreAgent {
 			createGlobTool(this.config.executor),
 			createGrepTool(this.config.executor),
 			createRtkTool(this.config.executor),
+			// 添加 web 工具
+			createWebSearchTool(),
+			createWebReaderTool(),
 			// 添加 memory 工具
 			...getAllMemoryTools(state.memoryStore, state.channelMemoryStore, workspacePath),
 			// 添加 event 工具（如果 eventsWatcher 可用）
