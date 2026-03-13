@@ -178,11 +178,41 @@ export class FeishuPlatformContext implements PlatformContext {
 		if (duration === undefined) {
 			duration = await this.detectAudioDuration(filePath);
 		}
-		// 2. 根据文件扩展名确定类型
+		
+		// 2. 如果不是 opus 格式，需要转换
 		const isOpus = filePath.toLowerCase().endsWith(".opus");
-		const fileType = isOpus ? "opus" : "mp3";
+		let finalPath = filePath;
+		let fileType = "opus";
+		
+		if (!isOpus) {
+			// 使用 ffmpeg 转换为 opus 格式
+			const { exec } = await import("child_process");
+			const { promisify } = await import("util");
+			const { tmpdir } = await import("os");
+			const { join, basename, extname } = await import("path");
+			const { existsSync, unlinkSync } = await import("fs");
+			
+			const execAsync = promisify(exec);
+			const baseName = basename(filePath, extname(filePath));
+			const opusPath = join(tmpdir(), `${baseName}-${Date.now()}.opus`);
+			
+			try {
+				await execAsync(`ffmpeg -i "${filePath}" -c:a libopus -b:a 24k "${opusPath}" -y`);
+				finalPath = opusPath;
+				// 清理临时文件
+				if (existsSync(filePath) && filePath.startsWith(tmpdir())) {
+					try { unlinkSync(filePath); } catch {}
+				}
+			} catch (error) {
+				console.error(`[FeishuContext] Failed to convert audio to opus: ${error}`);
+				// 转换失败，尝试直接用原文件
+				fileType = filePath.toLowerCase().endsWith(".mp3") ? "mp3" : 
+				           filePath.toLowerCase().endsWith(".wav") ? "wav" : "opus";
+			}
+		}
+		
 		// 3. 上传音频文件
-		const fileKey = await this.larkClient.uploadFile(filePath, fileType, duration);
+		const fileKey = await this.larkClient.uploadFile(finalPath, fileType, duration);
 		// 4. 发送语音消息（使用 audio 类型，显示为可播放气泡）
 		return await this.messageSender.sendAudio(chatId, fileKey, duration);
 	}
