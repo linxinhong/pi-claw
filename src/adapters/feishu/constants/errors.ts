@@ -163,3 +163,134 @@ export function extractLarkErrorMessage(error: unknown): string | undefined {
 
 	return undefined;
 }
+
+// ============================================================================
+// Error Classes
+// ============================================================================
+
+/**
+ * 权限错误基础信息
+ */
+export interface ScopeErrorInfo {
+	/** API 名称 */
+	apiName?: string;
+	/** 权限列表 */
+	scopes: string[];
+	/** 应用 ID */
+	appId?: string;
+}
+
+/**
+ * 用户需要授权错误
+ *
+ * 当没有有效的用户访问令牌时抛出，需要触发 OAuth 流程
+ */
+export class NeedAuthorizationError extends Error {
+	readonly userOpenId: string;
+
+	constructor(userOpenId: string) {
+		super("need_user_authorization");
+		this.name = "NeedAuthorizationError";
+		this.userOpenId = userOpenId;
+	}
+}
+
+/**
+ * 应用权限缺失错误
+ *
+ * 应用未开通 OAPI 所需 scope，需要管理员在飞书开放平台开通权限
+ */
+export class AppScopeMissingError extends Error {
+	/** API 名称 */
+	readonly apiName?: string;
+	/** 缺失的权限列表 */
+	readonly missingScopes: string[];
+	/** 应用 ID */
+	readonly appId?: string;
+	/** 授权 URL */
+	readonly grantUrl?: string;
+
+	constructor(info: ScopeErrorInfo & { grantUrl?: string }) {
+		super(`应用缺少权限 [${info.scopes.join(", ")}]，请管理员在开放平台开通。`);
+		this.name = "AppScopeMissingError";
+		this.apiName = info.apiName;
+		this.missingScopes = info.scopes;
+		this.appId = info.appId;
+		this.grantUrl = info.grantUrl;
+	}
+}
+
+/**
+ * 用户授权需求错误
+ *
+ * 用户未授权或 scope 不足，需要发起 OAuth 授权
+ */
+export class UserAuthRequiredError extends Error {
+	readonly userOpenId: string;
+	readonly apiName?: string;
+	/** 需要授权的权限列表 */
+	readonly requiredScopes: string[];
+	/** 应用 ID */
+	readonly appId?: string;
+
+	constructor(userOpenId: string, info: ScopeErrorInfo) {
+		super("need_user_authorization");
+		this.name = "UserAuthRequiredError";
+		this.userOpenId = userOpenId;
+		this.apiName = info.apiName;
+		this.requiredScopes = info.scopes;
+		this.appId = info.appId;
+	}
+}
+
+/**
+ * 用户权限不足错误
+ *
+ * 服务端报 99991679 — 用户 token 的 scope 不足
+ */
+export class UserScopeInsufficientError extends Error {
+	readonly userOpenId: string;
+	readonly apiName?: string;
+	/** 缺失的权限列表 */
+	readonly missingScopes: string[];
+
+	constructor(userOpenId: string, info: ScopeErrorInfo) {
+		super("user_scope_insufficient");
+		this.name = "UserScopeInsufficientError";
+		this.userOpenId = userOpenId;
+		this.apiName = info.apiName;
+		this.missingScopes = info.scopes;
+	}
+}
+
+// ============================================================================
+// Type Guards for Error Classes
+// ============================================================================
+
+/**
+ * 检查是否是 NeedAuthorizationError
+ */
+export function isNeedAuthorizationError(error: unknown): error is NeedAuthorizationError {
+	return error instanceof NeedAuthorizationError;
+}
+
+/**
+ * 检查是否是 AppScopeMissingError
+ */
+export function isAppScopeMissingError(error: unknown): error is AppScopeMissingError {
+	return error instanceof AppScopeMissingError;
+}
+
+/**
+ * 检查是否是 UserAuthRequiredError
+ */
+export function isUserAuthRequiredError(error: unknown): error is UserAuthRequiredError {
+	return error instanceof UserAuthRequiredError;
+}
+
+/**
+ * 检查是否是 UserScopeInsufficientError
+ */
+export function isUserScopeInsufficientError(error: unknown): error is UserScopeInsufficientError {
+	return error instanceof UserScopeInsufficientError;
+}

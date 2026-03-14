@@ -2,6 +2,7 @@
  * Permission Error Handling
  *
  * 飞书权限错误检测和授权卡片发送
+ * 参考: openclaw-lark/src/tools/oauth-cards.ts
  */
 
 import type { FeishuPlatformContext } from "../context.js";
@@ -22,6 +23,42 @@ export interface PermissionError {
 	grantUrl: string;
 	/** 需要的权限列表 */
 	scopes: string[];
+}
+
+/**
+ * 授权卡片构建参数
+ */
+export interface AuthCardParams {
+	/** 授权 URL */
+	grantUrl: string;
+	/** 需要的权限列表 */
+	scopes: string[];
+	/** 过期时间（分钟），默认 5 分钟 */
+	expiresMin?: number;
+}
+
+// ============================================================================
+// URL Helpers
+// ============================================================================
+
+/**
+ * 将 URL 转换为飞书应用内打开的 URL
+ * 参考: openclaw-lark/src/tools/oauth-cards.ts toInAppWebUrl
+ */
+export function toInAppWebUrl(targetUrl: string): string {
+	const encoded = encodeURIComponent(targetUrl);
+	const lkMeta = encodeURIComponent(
+		JSON.stringify({
+			"page-meta": {
+				showNavBar: "false",
+				showBottomNavBar: "false",
+			},
+		}),
+	);
+	return (
+		"https://applink.feishu.cn/client/web_url/open" +
+		`?mode=sidebar-semi&max_width=800&reload=false&url=${encoded}&lk_meta=${lkMeta}`
+	);
 }
 
 // ============================================================================
@@ -194,7 +231,212 @@ export function clearPermissionErrorCooldown(appId?: string): void {
 }
 
 // ============================================================================
-// Auth Card
+// Auth Card Builders
+// ============================================================================
+
+/**
+ * 格式化权限描述
+ */
+function formatScopeDescription(scopes: string[]): string {
+	if (scopes.length === 0) {
+		return "授权后，应用将能够以您的身份执行相关操作。";
+	}
+
+	const desc = "授权后，应用将能够以您的身份执行相关操作。";
+
+	// 如果超过 5 个 scope，只显示前 3 个
+	if (scopes.length > 5) {
+		const previewScopes = scopes.slice(0, 3).map((s) => `- ${s}`).join("\n");
+		return `${desc}\n\n**所需权限**：\n${previewScopes}\n- ... (共 ${scopes.length} 个)`;
+	}
+
+	const scopeList = scopes.map((s) => `- ${s}`).join("\n");
+	return `${desc}\n\n**所需权限**：\n${scopeList}`;
+}
+
+/**
+ * 构建授权请求卡片
+ * 参考: openclaw-lark/src/tools/oauth-cards.ts buildAuthCard
+ */
+export function buildAuthCard(params: AuthCardParams): Record<string, unknown> {
+	const { grantUrl, scopes, expiresMin = 5 } = params;
+	const inAppUrl = toInAppWebUrl(grantUrl);
+	const multiUrl = {
+		url: inAppUrl,
+		pc_url: inAppUrl,
+		android_url: inAppUrl,
+		ios_url: inAppUrl,
+	};
+
+	const scopeDesc = formatScopeDescription(scopes);
+
+	return {
+		schema: "2.0",
+		config: {
+			wide_screen_mode: false,
+			style: {
+				color: {
+					"light-yellow-bg": {
+						light_mode: "rgba(255, 214, 102, 0.12)",
+						dark_mode: "rgba(255, 214, 102, 0.08)",
+					},
+				},
+			},
+		},
+		header: {
+			title: {
+				tag: "plain_text",
+				content: "需要您的授权才能继续",
+			},
+			subtitle: {
+				tag: "plain_text",
+				content: "",
+			},
+			template: "blue",
+			padding: "12px 12px 12px 12px",
+			icon: {
+				tag: "standard_icon",
+				token: "lock-chat_filled",
+			},
+		},
+		body: {
+			elements: [
+				// 授权说明
+				{
+					tag: "markdown",
+					content: scopeDesc,
+					text_size: "normal",
+				},
+				// 授权按钮
+				{
+					tag: "column_set",
+					flex_mode: "none",
+					horizontal_align: "right",
+					columns: [
+						{
+							tag: "column",
+							width: "auto",
+							elements: [
+								{
+									tag: "button",
+									text: { tag: "plain_text", content: "前往授权" },
+									type: "primary",
+									size: "medium",
+									multi_url: multiUrl,
+								},
+							],
+						},
+					],
+				},
+				// 失效时间提醒
+				{
+					tag: "markdown",
+					content: `<font color='grey'>授权链接将在 ${expiresMin} 分钟后失效，届时需重新发起</font>`,
+					text_size: "notation",
+				},
+				// 提示信息
+				{
+					tag: "markdown",
+					content: "<font color='grey'>授权完成后，请重新发送您的请求</font>",
+					text_size: "notation",
+				},
+			],
+		},
+	};
+}
+
+/**
+ * 构建授权成功卡片
+ */
+export function buildAuthSuccessCard(): Record<string, unknown> {
+	return {
+		schema: "2.0",
+		config: {
+			wide_screen_mode: false,
+			style: {
+				color: {
+					"light-green-bg": {
+						light_mode: "rgba(52, 199, 89, 0.12)",
+						dark_mode: "rgba(52, 199, 89, 0.08)",
+					},
+				},
+			},
+		},
+		header: {
+			title: {
+				tag: "plain_text",
+				content: "授权成功",
+			},
+			subtitle: {
+				tag: "plain_text",
+				content: "",
+			},
+			template: "green",
+			padding: "12px 12px 12px 12px",
+			icon: {
+				tag: "standard_icon",
+				token: "yes_filled",
+			},
+		},
+		body: {
+			elements: [
+				{
+					tag: "markdown",
+					content:
+						"您的飞书账号已成功授权，正在为您继续执行操作。\n\n" +
+						"<font color='grey'>如需撤销授权，可随时告诉我。</font>",
+				},
+			],
+		},
+	};
+}
+
+/**
+ * 构建授权失败卡片
+ */
+export function buildAuthFailedCard(reason: string): Record<string, unknown> {
+	return {
+		schema: "2.0",
+		config: {
+			wide_screen_mode: false,
+			style: {
+				color: {
+					"light-grey-bg": {
+						light_mode: "rgba(142, 142, 147, 0.12)",
+						dark_mode: "rgba(142, 142, 147, 0.08)",
+					},
+				},
+			},
+		},
+		header: {
+			title: {
+				tag: "plain_text",
+				content: "授权未完成",
+			},
+			subtitle: {
+				tag: "plain_text",
+				content: "",
+			},
+			template: "yellow",
+			padding: "12px 12px 12px 12px",
+			icon: {
+				tag: "standard_icon",
+				token: "warning_filled",
+			},
+		},
+		body: {
+			elements: [
+				{
+					tag: "markdown",
+					content: reason || "授权链接已过期，请重新发起授权。",
+				},
+			],
+		},
+	};
+}
+
+// ============================================================================
+// Auth Card Sending
 // ============================================================================
 
 /**
@@ -207,75 +449,31 @@ export async function sendAuthCard(
 	permissionError: PermissionError,
 ): Promise<void> {
 	const { grantUrl, scopes } = permissionError;
-	
+
 	// 构建授权卡片
-	const card = buildAuthCard(grantUrl, scopes);
-	
+	const card = buildAuthCard({ grantUrl, scopes });
+
 	// 发送卡片
 	await context.sendCard(context["chatId"], card);
 }
 
 /**
- * 构建授权卡片
+ * 发送授权成功卡片
  */
-function buildAuthCard(grantUrl: string, scopes: string[]): any {
-	const scopeText = scopes.slice(0, 3).join(", ");
-	const moreScopes = scopes.length > 3 ? ` 等 ${scopes.length} 个权限` : "";
-	
-	return {
-		schema: "2.0",
-		config: {
-			width_mode: "fill",
-		},
-		body: {
-			elements: [
-				{
-					tag: "div",
-					text: {
-						tag: "lark_md",
-						content: "⚠️ **需要授权**",
-					},
-				},
-				{
-					tag: "div",
-					text: {
-						tag: "lark_md",
-						content: `应用需要以下权限才能继续操作：\n\`${scopeText}${moreScopes}\``,
-					},
-				},
-				{
-					tag: "action",
-					actions: [
-						{
-							tag: "button",
-							text: {
-								tag: "plain_text",
-								content: "点击授权",
-							},
-							type: "primary",
-							url: grantUrl,
-							multi_url: {
-								default: {
-									url: grantUrl,
-									android_url: grantUrl,
-									ios_url: grantUrl,
-									pc_url: grantUrl,
-								},
-							},
-						},
-					],
-				},
-				{
-					tag: "div",
-					text: {
-						tag: "lark_md",
-						content: "_提示：授权完成后，请重新发送您的请求_",
-					},
-					margin: "8px 0 0 0",
-				},
-			],
-		},
-	};
+export async function sendAuthSuccessCard(context: FeishuPlatformContext): Promise<void> {
+	const card = buildAuthSuccessCard();
+	await context.sendCard(context["chatId"], card);
+}
+
+/**
+ * 发送授权失败卡片
+ */
+export async function sendAuthFailedCard(
+	context: FeishuPlatformContext,
+	reason: string,
+): Promise<void> {
+	const card = buildAuthFailedCard(reason);
+	await context.sendCard(context["chatId"], card);
 }
 
 /**
