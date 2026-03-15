@@ -698,8 +698,7 @@ export class FeishuPlatformContext implements PlatformContext {
 			toolCardId: null,
 		};
 
-		// 重置 CardKit 流式状态（暂时不启用，等有流式内容时再启用）
-		this.useCardKitStreaming = false;
+		// 重置 CardKit 流式状态（保留启用状态，由 updateStreaming 决定是否使用）
 		this.cardKitCardId = null;
 		this.cardKitMessageId = null;
 		this.cardKitLastContent = "";
