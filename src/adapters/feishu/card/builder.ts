@@ -153,6 +153,17 @@ export class CardBuilder {
 			elements.push(this.buildToolCallsList(toolCalls));
 		}
 
+		// 空数组保护：确保 elements 不为空，避免 API 400 错误
+		if (elements.length === 0) {
+			elements.push({
+				tag: "div",
+				text: {
+					tag: "plain_text",
+					content: "🤔 思考中……",
+				},
+			});
+		}
+
 		return {
 			schema: "2.0",
 			config: this.defaultConfig,

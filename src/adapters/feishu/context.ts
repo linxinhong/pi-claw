@@ -698,6 +698,7 @@ export class FeishuPlatformContext implements PlatformContext {
 		this.timeline = []; // 清空时间线
 		this.currentTurn = 0; // 重置 turn 轮次
 		this.toolCardCreating = false; // 重置工具卡片创建锁
+		this._responseSent = false; // 重置响应发送标记
 
 		this.logger?.debug("[cardIds] Resetting cardIds", {
 			location: "startThinking",
@@ -809,6 +810,12 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * @param stopReason 停止原因（"stop" 或 "end_turn" 表示最终回复，其他值表示中间 turn）
 	 */
 	async finishThinking(content: string, stopReason?: string): Promise<void> {
+		// 防重入保护：如果已经发送过响应，跳过
+		if (this._responseSent) {
+			this.logger?.debug("[finishThinking] Already sent, skipping");
+			return;
+		}
+
 		this.logger?.debug("[finishThinking] Called", {
 			stopReason,
 			toolCardId: this.cardIds.toolCardId,
