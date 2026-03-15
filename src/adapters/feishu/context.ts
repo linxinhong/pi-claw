@@ -92,7 +92,7 @@ export class FeishuPlatformContext implements PlatformContext {
 	private lastStreamingTimelineHash: string = "";
 
 	// CardKit 流式状态
-	private useCardKitStreaming: boolean = false;  // 是否使用 CardKit 流式模式
+	private useCardKitStreaming: boolean = true;  // 默认启用 CardKit 流式模式（打字机效果）
 	private cardKitCardId: string | null = null;   // CardKit 卡片实体 ID
 	private cardKitMessageId: string | null = null; // CardKit 卡片消息 ID
 	private cardKitLastContent: string = "";       // 上次流式更新的内容（用于去重）
