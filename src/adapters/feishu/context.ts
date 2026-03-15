@@ -815,8 +815,6 @@ export class FeishuPlatformContext implements PlatformContext {
 			this.logger?.debug("[finishThinking] Already sent, skipping");
 			return;
 		}
-		// 立即设置标记，防止竞态条件
-		this._responseSent = true;
 
 		this.logger?.debug("[finishThinking] Called", {
 			stopReason,

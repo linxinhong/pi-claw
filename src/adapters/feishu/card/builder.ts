@@ -128,25 +128,52 @@ export class CardBuilder {
 		});
 		const elements: CardElement[] = [];
 
-		// 1. reasoning 折叠面板（如果有）
-		if (reasoningContent) {
+		// 1. 合并的思考过程折叠面板（reasoning + 时间线）
+		if (reasoningContent || hasTimeline) {
 			const durationLabel = reasoningElapsedMs
 				? formatReasoningDuration(reasoningElapsedMs)
 				: "Thought";
+			const panelElements: CardElement[] = [];
+
+			// reasoning 内容（如果有）
+			if (reasoningContent) {
+				panelElements.push({
+					tag: "markdown",
+					content: `### 💭 ${durationLabel}\n${reasoningContent}`,
+					text_size: "notation",
+				});
+				// 如果有工具调用，添加分隔线
+				if (hasTimeline) {
+					panelElements.push({ tag: "hr" });
+				}
+			}
+
+			// 工具调用时间线（如果有）
+			if (hasTimeline) {
+				console.log("[CARD_TYPE] buildToolCallsCard: 使用合并的时间线折叠面板");
+				panelElements.push(this.buildTimelineContent(timeline!));
+			}
+
 			elements.push({
 				tag: "collapsible_panel",
 				expanded: expanded,
 				header: {
-					title: { tag: "plain_text", content: `💭 ${durationLabel}` },
+					title: { tag: "plain_text", content: `思考过程 (${durationLabel})` },
+					text_size: "normal",
+					vertical_align: "center",
+					icon: {
+						tag: "standard_icon",
+						token: "down-small-ccm_outlined",
+						size: "14px 14px",
+					},
+					icon_position: "follow_text",
+					icon_expanded_angle: -180,
 				},
-				elements: [{ tag: "markdown", content: reasoningContent, text_size: "notation" }],
+				border: { color: "grey", corner_radius: "5px" },
+				vertical_spacing: "8px",
+				padding: "8px 8px 8px 8px",
+				elements: panelElements,
 			} as CardElement);
-		}
-
-		// 2. 时间线折叠面板（如果有工具调用）
-		if (hasTimeline) {
-			console.log("[CARD_TYPE] buildToolCallsCard: 使用时间线折叠面板");
-			elements.push(this.buildTimelinePanel(timeline!, expanded));
 		} else if (toolCalls && toolCalls.length > 0) {
 			console.log("[CARD_TYPE] buildToolCallsCard: 使用旧的工具调用列表（无timeline）");
 			// 没有 timeline 时使用旧的工具调用列表
@@ -489,6 +516,44 @@ export class CardBuilder {
 
 		// Final panel structure 调试日志已禁用
 		return panel;
+	}
+
+	/**
+	 * 构建时间线内容（不包含 panel 包装），用于合并到其他面板中
+	 */
+	private buildTimelineContent(timeline: TimelineEvent[]): CardElement {
+		// 按 turn 分组
+		const turnGroups = this.groupByTurn(timeline);
+
+		// 构建每轮的内容
+		const turnLines: string[] = [];
+		const turns = Object.keys(turnGroups).sort((a, b) => Number(a) - Number(b));
+
+		turns.forEach((turn, index) => {
+			const events = turnGroups[Number(turn)];
+
+			// 添加该轮的事件
+			events.forEach(event => {
+				if (event.type === "thinking") {
+					turnLines.push(`• ${event.content}`);
+				} else {
+					const statusIcon = this.getStatusIcon(event.status);
+					const argsDisplay = event.args ? ` (${event.args})` : "";
+					turnLines.push(`• Used **${event.content}**${argsDisplay} ${statusIcon}`);
+				}
+			});
+
+			// 添加分割线（最后一轮不加）
+			if (index < turns.length - 1) {
+				turnLines.push("");
+			}
+		});
+
+		return {
+			tag: "markdown",
+			content: turnLines.join("\n"),
+			text_size: "notation",
+		};
 	}
 
 	/**
