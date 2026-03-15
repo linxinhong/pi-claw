@@ -784,7 +784,11 @@ export class FeishuPlatformContext implements PlatformContext {
 			return this.cardKitLastContent;
 		}
 		// Patch 模式
-		return this.lastStreamingContent;
+		if (this.lastStreamingContent) {
+			return this.lastStreamingContent;
+		}
+		// 思考内容作为备选（当 updateStreaming 未被调用时）
+		return this.thinkingContent;
 	}
 
 	/**
