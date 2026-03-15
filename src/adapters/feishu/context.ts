@@ -716,7 +716,8 @@ export class FeishuPlatformContext implements PlatformContext {
 		this.cardKitClient.resetStreaming();
 
 		// 只创建一张工具卡片（初始为空），传递 quoteMessageId 引用原消息
-		const initialCard = this.cardBuilder.buildToolCallsCard([], []);
+		// 使用 buildStatusCard 而不是 buildToolCallsCard，因为后者在空数组时会返回空 elements 导致 400 错误
+		const initialCard = this.cardBuilder.buildStatusCard(undefined, "processing");
 		const messageId = await this.messageSender.sendCard(this.chatId, initialCard, this.quoteMessageId || undefined);
 		this.cardIds.toolCardId = messageId;
 
