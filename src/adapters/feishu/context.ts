@@ -920,7 +920,14 @@ export class FeishuPlatformContext implements PlatformContext {
 				}
 
 				if (!isRateLimit) {
-					this.logger?.error("Failed to send dual cards, falling back to text", undefined, error as Error);
+					// 提取更多错误详情
+					const errorDetails = {
+						message: error?.message,
+						code: error?.code,
+						status: error?.response?.status,
+						data: error?.response?.data,
+					};
+					this.logger?.error("Failed to send dual cards, falling back to text", errorDetails, error as Error);
 				}
 				// 降级发送文本（仅在不是频率限制时）
 				if (!isRateLimit && content) {

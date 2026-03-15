@@ -341,21 +341,43 @@ export class LarkClient {
 	 * @param replyInThread 是否在话题中回复
 	 */
 	async replyCard(messageId: string, card: any, replyInThread?: boolean): Promise<FeishuSendResult> {
-		this.logger?.debug("Replying card message", { messageId, replyInThread });
+		const cardJson = JSON.stringify(card);
+		const cardSize = cardJson.length;
+		this.logger?.debug("Replying card message", { messageId, replyInThread, cardSize });
 
-		const response = await this.client.im.v1.message.reply({
-			path: {
-				message_id: messageId,
-			},
-			data: {
-				content: JSON.stringify(card),
-				msg_type: "interactive",
-				reply_in_thread: replyInThread ?? false,
-			},
-		});
+		// 飞书卡片大小限制检查（100KB）
+		if (cardSize > 100 * 1024) {
+			this.logger?.warn("Card size exceeds 100KB limit, may fail", { cardSize });
+		}
 
-		if (response.code !== 0) {
-			throw new Error(`Failed to reply card: [${response.code}] ${response.msg}`);
+		let response: any;
+		try {
+			response = await this.client.im.v1.message.reply({
+				path: {
+					message_id: messageId,
+				},
+				data: {
+					content: cardJson,
+					msg_type: "interactive",
+					reply_in_thread: replyInThread ?? false,
+				},
+			});
+
+			if (response.code !== 0) {
+				throw new Error(`Failed to reply card: [${response.code}] ${response.msg}`);
+			}
+		} catch (error: any) {
+			// 捕获并记录详细错误信息
+			const errorInfo = {
+				message: error?.message,
+				code: error?.code,
+				status: error?.response?.status,
+				statusText: error?.response?.statusText,
+				data: error?.response?.data,
+				cardSize,
+			};
+			this.logger?.error("replyCard API call failed", errorInfo, error);
+			throw error;
 		}
 
 		const replyMessageId = response.data?.message_id;
