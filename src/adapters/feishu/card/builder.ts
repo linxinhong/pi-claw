@@ -159,7 +159,6 @@ export class CardBuilder {
 				expanded: expanded,
 				header: {
 					title: { tag: "plain_text", content: `思考过程 (${durationLabel})` },
-					text_size: "normal",
 					vertical_align: "center",
 					icon: {
 						tag: "standard_icon",
@@ -493,7 +492,6 @@ export class CardBuilder {
 				title: {
 					tag: "plain_text",
 					content: "思考过程",
-					text_size: "normal",
 				},
 				vertical_align: "center",
 				icon: {
