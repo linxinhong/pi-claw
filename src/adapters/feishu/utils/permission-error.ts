@@ -496,16 +496,18 @@ export function buildAuthFailedCard(reason: string): Record<string, unknown> {
 // ============================================================================
 
 /**
- * 发送权限授权提示（使用纯文本，避免权限死循环）
+ * 发送权限授权提示卡片（避免权限死循环）
  *
- * 注意：这里不能使用 sendCard，因为 sendCard 内部会调用 convertAtMentions，
+ * 注意：这里使用 sendReplyCard 而不是 sendCard，因为 sendCard 内部会调用 convertAtMentions，
  * 而 convertAtMentions 需要 getChatMembers 权限，会导致死循环：
  *
  * handleError() → sendAuthCard() → sendCard() → convertAtMentions() → getChatMembers()
  *     ↑ 权限不足                                              ↓
  *     └──────────────────── 抛出权限错误 ←─────────────────────┘
  *
- * 解决方案：使用 sendReplyText 直接发送纯文本，不调用 convertAtMentions
+ * 解决方案：使用 sendReplyCard 直接发送卡片，不调用 convertAtMentions
+ *
+ * 参考：openclaw-lark 的 sendCardByCardId 直接调用飞书 API，不调用 convertAtMentions
  *
  * @param context 飞书平台上下文
  * @param permissionError 权限错误信息
@@ -518,11 +520,15 @@ export async function sendAuthCard(
 	const chatId = context["chatId"];
 	const replyToMessageId = context["quoteMessageId"] ?? undefined;
 
-	// 使用纯文本 + reply-to 发送授权提示，避免权限死循环
-	const scopeText = scopes?.length ? scopes.join(", ") : "未知权限";
-	const text = `⚠️ 应用缺少以下权限，请前往开通：\n\n权限：${scopeText}\n\n授权链接：${grantUrl}`;
+	// 构建授权卡片
+	const card = buildAuthCard({
+		grantUrl,
+		scopes,
+		expiresMin: 5,
+	});
 
-	await context.sendReplyText(chatId, text, replyToMessageId);
+	// 使用 sendReplyCard 发送卡片，避免权限死循环
+	await context.sendReplyCard(chatId, card, replyToMessageId);
 }
 
 /**

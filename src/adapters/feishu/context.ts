@@ -257,6 +257,19 @@ export class FeishuPlatformContext implements PlatformContext {
 	}
 
 	/**
+	 * 发送卡片回复（不转换 @ 提及，避免权限死循环）
+	 * 用于发送授权卡片等需要避免权限检查的场景
+	 *
+	 * 关键：此方法直接调用 messageSender.sendCard，不经过 convertAtMentions，
+	 * 因此不会触发 getChatMembers 权限检查，避免死循环。
+	 *
+	 * 参考：openclaw-lark 的 sendCardByCardId 直接调用飞书 API，不调用 convertAtMentions
+	 */
+	async sendReplyCard(chatId: string, card: any, replyToMessageId?: string): Promise<string> {
+		return await this.messageSender.sendCard(chatId, card, replyToMessageId);
+	}
+
+	/**
 	 * 发送卡片消息
 	 */
 	async sendCard(chatId: string, card: any): Promise<string> {
