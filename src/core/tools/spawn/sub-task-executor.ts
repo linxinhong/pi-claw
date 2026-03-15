@@ -100,6 +100,7 @@ export class SubTaskExecutor {
 	private async runSession(session: AgentSession, prompt: string, timeout: number): Promise<string> {
 		return new Promise((resolve, reject) => {
 			let finalResponse = "";
+			let accumulatedContent = ""; // 累积的 thinking 内容
 			let timeoutHandle: NodeJS.Timeout | undefined;
 			let settled = false;
 
@@ -108,7 +109,8 @@ export class SubTaskExecutor {
 				timeoutHandle = setTimeout(() => {
 					if (!settled) {
 						settled = true;
-						reject(new Error(`Task timed out after ${timeout}ms`));
+						// 超时时返回已累积的内容
+						resolve(accumulatedContent || finalResponse);
 					}
 				}, timeout);
 			}
@@ -117,8 +119,32 @@ export class SubTaskExecutor {
 			const unsubscribe = session.subscribe((event) => {
 				if (settled) return;
 
-				if (event.type === "message_end" && event.message.role === "assistant") {
-					const content = event.message.content;
+				// 处理 message_update 事件，累积 thinking 内容
+				if (event.type === "message_update") {
+					const message = (event as any).message;
+					const thinkingContent = message?.content?.find((c: any) => c.type === "thinking");
+					if (thinkingContent?.thinking) {
+						accumulatedContent = thinkingContent.thinking;
+					}
+				}
+
+				// 处理 turn_end 事件（SDK 可能不发送 message_end）
+				if (event.type === "turn_end") {
+					const stopReason = (event as any).stopReason || "stop";
+					const isFinalTurn = stopReason === "stop" || stopReason === "end_turn" || stopReason === "error";
+
+					if (isFinalTurn) {
+						settled = true;
+						if (timeoutHandle) clearTimeout(timeoutHandle);
+						unsubscribe();
+						// 优先使用累积的内容，否则使用 finalResponse
+						resolve(accumulatedContent || finalResponse);
+					}
+				}
+
+				// 处理 message_end 事件（保持兼容）
+				if (event.type === "message_end" && (event as any).message.role === "assistant") {
+					const content = (event as any).message.content;
 					const textParts = content.filter((c: any) => c.type === "text").map((c: any) => c.text);
 					finalResponse = textParts.join("\n");
 
