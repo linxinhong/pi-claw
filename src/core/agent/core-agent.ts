@@ -544,12 +544,22 @@ export class CoreAgent {
 
 							const content = agentEvent.message.content;
 							const textParts = content.filter((c: any) => c.type === "text").map((c: any) => c.text);
-							finalResponse = textParts.join("\n");
+							let responseContent = textParts.join("\n");
+
+							// 当 stopReason 为 error 时，如果有错误消息，将其作为响应内容
+							if (stopReason === "error" && assistantMsg.errorMessage) {
+								responseContent = `❌ **发生错误**\n\n${assistantMsg.errorMessage}`;
+								log.logInfo(`[Agent] Error response: ${assistantMsg.errorMessage}`);
+							}
+
+							finalResponse = responseContent;
 
 							// 完成思考卡片（传递 stopReason 以区分中间 turn 和最终 turn）
+							// 注意：error 也视为最终回复，需要显示给用户
+							const isFinalResponse = stopReason === "stop" || stopReason === "end_turn" || stopReason === "error";
 							if ((platformContext as any).finishThinking) {
 								log.logInfo(`[Agent] Calling finishThinking with content: "${finalResponse.slice(0, 50)}...", stopReason: ${stopReason}`);
-								await (platformContext as any).finishThinking(finalResponse, stopReason);
+								await (platformContext as any).finishThinking(finalResponse, isFinalResponse ? "stop" : stopReason);
 							}
 
 							resolve(finalResponse);
