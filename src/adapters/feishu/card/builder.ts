@@ -14,7 +14,11 @@ import { splitReasoningText, formatReasoningDuration } from "./reasoning-parser.
 interface CardConfig {
 	width_mode?: "fill" | "normal";
 	update_multi?: boolean;
+	streaming_mode?: boolean;
 }
+
+/** 流式卡片元素 ID（用于 CardKit 流式更新） */
+export const STREAMING_ELEMENT_ID = "streaming_content";
 
 interface CardElement {
 	tag: string;
@@ -154,7 +158,46 @@ export class CardBuilder {
 	}
 
 	/**
-	 * 构建流式输出卡片
+	 * 构建流式输出卡片（CardKit 流式模式）
+	 * 用于实现打字机效果
+	 * @param content 初始内容（通常为空）
+	 * @param options 可选的工具调用和时间线
+	 */
+	buildCardKitStreamingCard(content: string = "", options?: {
+		toolCalls?: ToolCallInfo[];
+		timeline?: TimelineEvent[];
+	}): Card {
+		console.log("[CARD_TYPE] buildCardKitStreamingCard - CardKit 流式卡片", {
+			contentLength: content?.length || 0,
+		});
+
+		const elements: CardElement[] = [];
+
+		// 1. 流式内容区域（使用 element_id 标识，用于 CardKit 流式更新）
+		elements.push({
+			tag: "markdown",
+			element_id: STREAMING_ELEMENT_ID,
+			content: content ? this.formatContent(content) : " ",
+			text_size: "normal_v2",
+		});
+
+		// 2. 时间线折叠面板（如果有）
+		if (options?.timeline && options.timeline.length > 0) {
+			elements.push(this.buildTimelinePanel(options.timeline, true));
+		}
+
+		return {
+			schema: "2.0",
+			config: {
+				...this.defaultConfig,
+				streaming_mode: true,  // 启用流式模式
+			},
+			body: { elements },
+		};
+	}
+
+	/**
+	 * 构建流式输出卡片（传统 patch 模式）
 	 */
 	buildStreamingCard(content: string, options?: {
 		toolCalls?: ToolCallInfo[];

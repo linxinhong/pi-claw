@@ -11,7 +11,8 @@ import type { FeishuStore } from "./store.js";
 import type { MessageSender } from "./messaging/outbound/sender.js";
 import type { PiLogger } from "../../utils/logger/index.js";
 import type { ToolCallInfo, MultiCardIds, TimelineEvent } from "./types.js";
-import { CardBuilder } from "./card/builder.js";
+import { CardBuilder, STREAMING_ELEMENT_ID } from "./card/builder.js";
+import { CardKitClient } from "./card/cardkit.js";
 import { extractPermissionError, shouldNotifyPermissionError, sendAuthCard } from "./utils/permission-error.js";
 import { isMessageUnavailable, isMessageUnavailableError } from "./utils/message-unavailable.js";
 
@@ -46,6 +47,7 @@ export class FeishuPlatformContext implements PlatformContext {
 	private store: FeishuStore;
 	private logger?: PiLogger;
 	private cardBuilder: CardBuilder;
+	private cardKitClient: CardKitClient;
 
 	// 多卡片 ID 管理
 	private cardIds: MultiCardIds = {
@@ -89,6 +91,13 @@ export class FeishuPlatformContext implements PlatformContext {
 	private lastStreamingContent: string = "";
 	private lastStreamingTimelineHash: string = "";
 
+	// CardKit 流式状态
+	private useCardKitStreaming: boolean = false;  // 是否使用 CardKit 流式模式
+	private cardKitCardId: string | null = null;   // CardKit 卡片实体 ID
+	private cardKitMessageId: string | null = null; // CardKit 卡片消息 ID
+	private cardKitLastContent: string = "";       // 上次流式更新的内容（用于去重）
+	private readonly STREAMING_DEBOUNCE_MS = 100;  // 流式更新防抖时间
+
 	// 响应是否已发送标志
 	private _responseSent: boolean = false;
 
@@ -110,7 +119,13 @@ export class FeishuPlatformContext implements PlatformContext {
 		this.store = options.store;
 		this.logger = options.logger;
 		this.cardBuilder = new CardBuilder();
-		
+
+		// 初始化 CardKit 客户端（用于打字机效果）
+		this.cardKitClient = new CardKitClient({
+			client: this.larkClient["client"],  // 访问 LarkClient 内部的 SDK 客户端
+			logger: this.logger,
+		});
+
 		// 设置引用消息 ID（如果提供）
 		if (options.quoteMessageId) {
 			this.quoteMessageId = options.quoteMessageId;
@@ -129,6 +144,15 @@ export class FeishuPlatformContext implements PlatformContext {
 	 */
 	isThinkingHidden(): boolean {
 		return this.hideThinking;
+	}
+
+	/**
+	 * 启用 CardKit 流式模式（打字机效果）
+	 * @param enabled 是否启用
+	 */
+	setCardKitStreaming(enabled: boolean): void {
+		this.useCardKitStreaming = enabled;
+		this.logger?.debug(`[CardKit] Streaming mode ${enabled ? "enabled" : "disabled"}`);
 	}
 
 	// ========================================================================
@@ -435,6 +459,80 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * 更新流式输出内容
 	 */
 	async updateStreaming(content: string): Promise<void> {
+		// 如果启用 CardKit 流式模式，使用新的流式 API
+		if (this.useCardKitStreaming) {
+			return this.updateCardKitStreaming(content);
+		}
+
+		// 传统 patch 模式
+		return this.updateStreamingPatch(content);
+	}
+
+	/**
+	 * 使用 CardKit API 进行流式更新（打字机效果）
+	 */
+	private async updateCardKitStreaming(content: string): Promise<void> {
+		const timeline = this.getTimeline();
+
+		// 首次调用：创建 CardKit 卡片实体并发送
+		if (!this.cardKitCardId) {
+			try {
+				// 1. 构建流式卡片
+				const card = this.cardBuilder.buildCardKitStreamingCard(content, { timeline });
+
+				// 2. 创建卡片实体
+				this.cardKitCardId = await this.cardKitClient.createCardEntity(card);
+				this.cardKitLastContent = content;
+
+				// 3. 发送卡片消息
+				this.cardKitMessageId = await this.cardKitClient.sendCardByCardId(
+					this.chatId,
+					this.cardKitCardId,
+					this.quoteMessageId || undefined
+				);
+
+				this.currentCardStatus = "streaming";
+				this.logger?.debug("[CardKit] Streaming card created", {
+					cardId: this.cardKitCardId,
+					messageId: this.cardKitMessageId,
+				});
+				return;
+			} catch (error: any) {
+				this.logger?.error("[CardKit] Failed to create streaming card", undefined, error as Error);
+				// 降级到传统模式
+				this.useCardKitStreaming = false;
+				return this.updateStreamingPatch(content);
+			}
+		}
+
+		// 后续调用：流式更新内容
+		// 去重：如果内容没有变化，跳过更新
+		if (content === this.cardKitLastContent) {
+			return;
+		}
+
+		try {
+			// 使用 CardKit 的 cardElement.content API 进行流式更新
+			await this.cardKitClient.streamCardContent(
+				this.cardKitCardId,
+				STREAMING_ELEMENT_ID,
+				this.formatCardContent(content)
+			);
+			this.cardKitLastContent = content;
+		} catch (error: any) {
+			const errorMsg = String(error?.message || error);
+			if (errorMsg.includes("230020") || error?.code === 230020) {
+				this.logger?.debug("[CardKit] Stream update rate limited, skipping");
+				return;
+			}
+			this.logger?.error("[CardKit] Failed to stream content", undefined, error as Error);
+		}
+	}
+
+	/**
+	 * 使用传统 patch 模式进行流式更新
+	 */
+	private async updateStreamingPatch(content: string): Promise<void> {
 		const timeline = this.getTimeline();
 
 		// 计算 timeline 的简单哈希（用于快速比较）
@@ -497,6 +595,24 @@ export class FeishuPlatformContext implements PlatformContext {
 			// 发送失败，降级为文本消息（不是频率限制时才降级）
 			await this.messageSender.sendText(this.chatId, content, this.quoteMessageId || undefined);
 		}
+	}
+
+	/**
+	 * 格式化卡片内容（转换为飞书兼容的 Markdown）
+	 */
+	private formatCardContent(content: string): string {
+		// 使用 CardBuilder 的格式化方法
+		return content
+			// 转换代码块
+			.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
+				return `\`\`\`${lang || ""}\n${code.trim()}\n\`\`\``;
+			})
+			// 转换行内代码
+			.replace(/`([^`]+)`/g, "`$1`")
+			// 转换链接
+			.replace(/\[([^\]]+)\]\(([^)]+)\)/g, "[$1]($2)")
+			// 转义 @ 符号
+			.replace(/@([a-zA-Z0-9_\u4e00-\u9fa5]+)/g, "\\@$1");
 	}
 
 	/**
@@ -581,6 +697,13 @@ export class FeishuPlatformContext implements PlatformContext {
 			thinkingCardId: null,
 			toolCardId: null,
 		};
+
+		// 重置 CardKit 流式状态（暂时不启用，等有流式内容时再启用）
+		this.useCardKitStreaming = false;
+		this.cardKitCardId = null;
+		this.cardKitMessageId = null;
+		this.cardKitLastContent = "";
+		this.cardKitClient.resetStreaming();
 
 		// 只创建一张工具卡片（初始为空），传递 quoteMessageId 引用原消息
 		const initialCard = this.cardBuilder.buildToolCallsCard([], []);
@@ -683,6 +806,18 @@ export class FeishuPlatformContext implements PlatformContext {
 			return;
 		}
 
+		// 如果使用 CardKit 流式模式，需要完成流式更新
+		if (this.useCardKitStreaming && this.cardKitCardId) {
+			try {
+				await this.finishCardKitStreaming(content, elapsed, timeline);
+				return;
+			} catch (error: any) {
+				this.logger?.error("[CardKit] Failed to finish streaming, falling back to patch mode", undefined, error as Error);
+				// 降级到传统模式继续处理
+				this.useCardKitStreaming = false;
+			}
+		}
+
 		// 如果有工具卡片，更新为完成状态（包含最终回复和时间线）
 		if (this.cardIds.toolCardId) {
 			try {
@@ -764,7 +899,86 @@ export class FeishuPlatformContext implements PlatformContext {
 				thinkingCardId: null,
 				toolCardId: null,
 			};
+
+			// 重置 CardKit 流式状态
+			this.useCardKitStreaming = false;
+			this.cardKitCardId = null;
+			this.cardKitMessageId = null;
+			this.cardKitLastContent = "";
+			this.cardKitClient.resetStreaming();
 		}
+	}
+
+	/**
+	 * 完成 CardKit 流式更新
+	 */
+	private async finishCardKitStreaming(
+		content: string,
+		elapsed: number | undefined,
+		timeline: TimelineEvent[]
+	): Promise<void> {
+		if (!this.cardKitCardId) return;
+
+		this.logger?.debug("[CardKit] Finishing streaming", { cardId: this.cardKitCardId });
+
+		// 1. 关闭流式模式
+		await this.cardKitClient.setStreamingMode(this.cardKitCardId, false);
+
+		// 2. 构建最终卡片
+		const finalCard = this.cardBuilder.buildCompleteCard(content, {
+			elapsed,
+			toolCalls: this.toolCalls,
+			timeline,
+			expanded: false,
+			reasoningElapsedMs: this.reasoningElapsedMs,
+		});
+
+		// 转换卡片内容中的 @用户名
+		if (finalCard?.body?.elements) {
+			for (const element of finalCard.body.elements) {
+				if (element.text?.content) {
+					element.text.content = await this.larkClient.convertAtMentions(this.chatId, element.text.content);
+				}
+				if (element.content) {
+					element.content = await this.larkClient.convertAtMentions(this.chatId, element.content);
+				}
+			}
+		}
+
+		// 3. 更新为最终卡片
+		await this.cardKitClient.updateCard(this.cardKitCardId, finalCard);
+
+		this.logger?.debug("[CardKit] Streaming finished successfully");
+
+		// 标记响应已发送
+		this._responseSent = true;
+
+		// 清理状态
+		this.currentCardStatus = "complete";
+		this.thinkingStartTime = null;
+		this.toolCalls = [];
+		this.timeline = [];
+		this.currentTurn = 0;
+		this.thinkingContent = "";
+		this.pendingContent = "";
+
+		// 重置 reasoning 耗时追踪
+		this.reasoningStartTime = null;
+		this.reasoningElapsedMs = 0;
+
+		// 重置卡片 ID
+		this.cardIds = {
+			statusCardId: null,
+			thinkingCardId: null,
+			toolCardId: null,
+		};
+
+		// 重置 CardKit 流式状态
+		this.useCardKitStreaming = false;
+		this.cardKitCardId = null;
+		this.cardKitMessageId = null;
+		this.cardKitLastContent = "";
+		this.cardKitClient.resetStreaming();
 	}
 
 	/**
