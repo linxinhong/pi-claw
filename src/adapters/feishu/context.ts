@@ -679,6 +679,12 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * @param quoteMessageId 可选的引用消息 ID，用于引用回复原消息
 	 */
 	async startThinking(quoteMessageId?: string): Promise<void> {
+		this.logger?.debug("[startThinking] Called", {
+			chatId: this.chatId,
+			quoteMessageId,
+			existingToolCardId: this.cardIds.toolCardId,
+		});
+
 		const now = Date.now();
 		this.thinkingStartTime = now;
 
@@ -692,6 +698,11 @@ export class FeishuPlatformContext implements PlatformContext {
 		this.timeline = []; // 清空时间线
 		this.currentTurn = 0; // 重置 turn 轮次
 		this.toolCardCreating = false; // 重置工具卡片创建锁
+
+		this.logger?.debug("[cardIds] Resetting cardIds", {
+			location: "startThinking",
+			previousToolCardId: this.cardIds.toolCardId,
+		});
 		this.cardIds = {
 			statusCardId: null,
 			thinkingCardId: null,
@@ -797,6 +808,12 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * @param stopReason 停止原因（"stop" 或 "end_turn" 表示最终回复，其他值表示中间 turn）
 	 */
 	async finishThinking(content: string, stopReason?: string): Promise<void> {
+		this.logger?.debug("[finishThinking] Called", {
+			stopReason,
+			toolCardId: this.cardIds.toolCardId,
+			isFinalResponse: stopReason === "stop" || stopReason === "end_turn",
+		});
+
 		// 清理节流定时器
 		this.cleanupThrottle();
 
@@ -909,6 +926,10 @@ export class FeishuPlatformContext implements PlatformContext {
 			this.reasoningElapsedMs = 0;
 
 			// 重置卡片 ID
+			this.logger?.debug("[cardIds] Resetting cardIds", {
+				location: "finishThinking",
+				previousToolCardId: this.cardIds.toolCardId,
+			});
 			this.cardIds = {
 				statusCardId: null,
 				thinkingCardId: null,
@@ -1068,9 +1089,11 @@ export class FeishuPlatformContext implements PlatformContext {
 			// 获取时间线并传入工具卡片
 			const timeline = this.getTimeline();
 			this.logger?.debug("[doUpdateOrCreateToolCard]", {
+				toolCardId: this.cardIds.toolCardId,
+				toolCardCreating: this.toolCardCreating,
+				action: this.cardIds.toolCardId ? "update" : (this.toolCardCreating ? "skip" : "create"),
 				toolCallsCount: this.toolCalls.length,
 				timelineCount: timeline?.length || 0,
-				timeline: timeline,
 			});
 			// 思考过程中展开折叠面板
 			const toolCard = this.cardBuilder.buildToolCallsCard(this.toolCalls, timeline, true);
@@ -1081,9 +1104,11 @@ export class FeishuPlatformContext implements PlatformContext {
 			} else if (!this.toolCardCreating) {
 				// 创建新卡片（加锁防止并发）
 				this.toolCardCreating = true;
+				this.logger?.debug("[doUpdateOrCreateToolCard] Creating new card");
 				try {
 					const messageId = await this.messageSender.sendCard(this.chatId, toolCard, this.quoteMessageId || undefined);
 					this.cardIds.toolCardId = messageId;
+					this.logger?.debug("[doUpdateOrCreateToolCard] Card created", { newToolCardId: messageId });
 				} finally {
 					this.toolCardCreating = false;
 				}
