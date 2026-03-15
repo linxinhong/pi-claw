@@ -816,6 +816,9 @@ export class FeishuPlatformContext implements PlatformContext {
 			return;
 		}
 
+		// 立即设置标记，防止竞态条件（turn_end 和 message_end 可能同时调用）
+		this._responseSent = true;
+
 		this.logger?.debug("[finishThinking] Called", {
 			stopReason,
 			toolCardId: this.cardIds.toolCardId,
@@ -930,14 +933,11 @@ export class FeishuPlatformContext implements PlatformContext {
 				// 降级发送文本（仅在不是频率限制时）
 				if (!isRateLimit && content) {
 					await this.messageSender.sendText(this.chatId, content, this.quoteMessageId || undefined);
-					this._responseSent = true;
 				}
 			}
 		} else if (content) {
 			// 没有思考卡片或没有思考内容时，直接发送结果
 			await this.messageSender.sendText(this.chatId, content, this.quoteMessageId || undefined);
-			// 标记响应已发送，防止重复发送
-			this._responseSent = true;
 		}
 
 		// 只有在最终回复时才清理状态
