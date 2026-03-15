@@ -533,6 +533,17 @@ export class CoreAgent {
 									timestamp: new Date(),
 								});
 							}
+
+							// 如果是最终 turn 且没有 message_end 事件，手动调用 finishThinking
+							const isFinalTurn = stopReason === "stop" || stopReason === "end_turn" || stopReason === "error";
+							if (isFinalTurn && (platformContext as any).finishThinking) {
+								// 从 platformContext 获取缓存的内容
+								const lastContent = (platformContext as any).getLastStreamingContent?.() || "";
+								if (lastContent) {
+									log.logInfo(`[Agent] turn_end with final stopReason, calling finishThinking`);
+									await (platformContext as any).finishThinking(lastContent, stopReason);
+								}
+							}
 						} else if (agentEvent.type === "message_end" && agentEvent.message.role === "assistant") {
 							const assistantMsg = agentEvent.message as any;
 							const stopReason = assistantMsg.stopReason || "stop";

@@ -776,6 +776,18 @@ export class FeishuPlatformContext implements PlatformContext {
 	}
 
 	/**
+	 * 获取最后的流式内容（用于 turn_end 时获取缓存的内容）
+	 */
+	getLastStreamingContent(): string {
+		// CardKit 模式优先
+		if (this.cardKitLastContent) {
+			return this.cardKitLastContent;
+		}
+		// Patch 模式
+		return this.lastStreamingContent;
+	}
+
+	/**
 	 * 完成思考，显示最终回复
 	 * @param content 最终回复内容
 	 * @param stopReason 停止原因（"stop" 或 "end_turn" 表示最终回复，其他值表示中间 turn）
