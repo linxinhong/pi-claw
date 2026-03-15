@@ -815,6 +815,8 @@ export class FeishuPlatformContext implements PlatformContext {
 			this.logger?.debug("[finishThinking] Already sent, skipping");
 			return;
 		}
+		// 立即设置标记，防止竞态条件
+		this._responseSent = true;
 
 		this.logger?.debug("[finishThinking] Called", {
 			stopReason,
@@ -899,8 +901,6 @@ export class FeishuPlatformContext implements PlatformContext {
 				);
 				await this.messageSender.updateCard(this.cardIds.toolCardId, collapsedCard);
 				this.logger?.debug("[finishThinking] Thinking card collapsed");
-
-				this._responseSent = true;
 			} catch (error: any) {
 				// 检查是否是消息不可用错误（消息已撤回/删除）
 				if (isMessageUnavailableError(error)) {
