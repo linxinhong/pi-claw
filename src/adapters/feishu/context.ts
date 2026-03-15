@@ -850,20 +850,26 @@ export class FeishuPlatformContext implements PlatformContext {
 			}
 		}
 
-		// 如果有工具卡片，更新为完成状态（包含最终回复和时间线）
-		if (this.cardIds.toolCardId) {
+		// 检查是否有思考内容（toolCalls 或 reasoning）
+		const hasThinkingContent = this.toolCalls.length > 0 || !!this.thinkingContent;
+
+		// 双卡片设计：如果有思考卡片且有思考内容
+		if (this.cardIds.toolCardId && hasThinkingContent) {
 			try {
-				// 使用 buildCompleteCard 将最终回复和时间线整合到一个卡片中
-				const finalCard = this.cardBuilder.buildCompleteCard(content, {
+				this.logger?.debug("[finishThinking] Starting dual-card flow", {
+					toolCardId: this.cardIds.toolCardId,
+					toolCallsCount: this.toolCalls.length,
+					hasReasoning: !!this.thinkingContent,
+				});
+
+				// 1. 先发送结果卡片（复用 buildCompleteCard，只显示回答部分，不传 timeline）
+				const resultCard = this.cardBuilder.buildCompleteCard(content, {
 					elapsed,
-					toolCalls: this.toolCalls,
-					timeline,
-					expanded: false,  // 完成时折叠
-					reasoningElapsedMs: this.reasoningElapsedMs,  // 传递思考耗时
+					// 不传 timeline 和 toolCalls，只显示回答
 				});
 				// 转换卡片内容中的 @用户名
-				if (finalCard?.body?.elements) {
-					for (const element of finalCard.body.elements) {
+				if (resultCard?.body?.elements) {
+					for (const element of resultCard.body.elements) {
 						if (element.text?.content) {
 							element.text.content = await this.larkClient.convertAtMentions(this.chatId, element.text.content);
 						}
@@ -872,8 +878,20 @@ export class FeishuPlatformContext implements PlatformContext {
 						}
 					}
 				}
-				await this.messageSender.updateCard(this.cardIds.toolCardId, finalCard);
-				// 标记响应已发送，防止 unified-bot 重复发送
+				await this.messageSender.sendCard(this.chatId, resultCard, this.quoteMessageId || undefined);
+				this.logger?.debug("[finishThinking] Result card sent");
+
+				// 2. 发送成功后，折叠思考卡片
+				const collapsedCard = this.cardBuilder.buildToolCallsCard(
+					this.toolCalls,
+					timeline,
+					false,  // expanded = false，折叠
+					this.thinkingContent,      // reasoning 内容
+					this.reasoningElapsedMs    // reasoning 耗时
+				);
+				await this.messageSender.updateCard(this.cardIds.toolCardId, collapsedCard);
+				this.logger?.debug("[finishThinking] Thinking card collapsed");
+
 				this._responseSent = true;
 			} catch (error: any) {
 				// 检查是否是消息不可用错误（消息已撤回/删除）
@@ -889,22 +907,21 @@ export class FeishuPlatformContext implements PlatformContext {
 
 				// 检查是否是权限错误 (code 99991672) - 需要重新抛出以显示授权卡片
 				if (errorCode === 99991672) {
-					this.logger?.warn("Permission error in finishStreaming, re-throwing for auth card", { errorMsg });
+					this.logger?.warn("Permission error in finishThinking, re-throwing for auth card", { errorMsg });
 					throw error;
 				}
 
 				if (!isRateLimit) {
-					this.logger?.error("Failed to update final card", undefined, error as Error);
+					this.logger?.error("Failed to send dual cards, falling back to text", undefined, error as Error);
 				}
-				// 更新失败，降级发送文本（仅在不是频率限制时）
+				// 降级发送文本（仅在不是频率限制时）
 				if (!isRateLimit && content) {
 					await this.messageSender.sendText(this.chatId, content, this.quoteMessageId || undefined);
-					// 标记响应已发送，防止重复发送
 					this._responseSent = true;
 				}
 			}
 		} else if (content) {
-			// 没有卡片时才发送文本消息
+			// 没有思考卡片或没有思考内容时，直接发送结果
 			await this.messageSender.sendText(this.chatId, content, this.quoteMessageId || undefined);
 			// 标记响应已发送，防止重复发送
 			this._responseSent = true;
@@ -1094,9 +1111,16 @@ export class FeishuPlatformContext implements PlatformContext {
 				action: this.cardIds.toolCardId ? "update" : (this.toolCardCreating ? "skip" : "create"),
 				toolCallsCount: this.toolCalls.length,
 				timelineCount: timeline?.length || 0,
+				hasThinkingContent: !!this.thinkingContent,
 			});
-			// 思考过程中展开折叠面板
-			const toolCard = this.cardBuilder.buildToolCallsCard(this.toolCalls, timeline, true);
+			// 思考过程中展开折叠面板，传入 reasoning 内容
+			const toolCard = this.cardBuilder.buildToolCallsCard(
+				this.toolCalls,
+				timeline,
+				true,  // expanded = true，思考过程中展开
+				this.thinkingContent,      // 新增参数
+				this.reasoningElapsedMs    // 新增参数
+			);
 
 			if (this.cardIds.toolCardId) {
 				// 更新现有卡片

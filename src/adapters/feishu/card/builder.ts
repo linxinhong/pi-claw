@@ -104,26 +104,50 @@ export class CardBuilder {
 	}
 
 	/**
-	 * 构建工具调用卡片
+	 * 构建工具调用卡片（包含 reasoning 和工具调用）
 	 * @param toolCalls 工具调用列表
-	 * @param timeline 时间线事件列表（可选）
-	 * @param expanded 折叠面板是否展开（思考过程中展开，完成后折叠）
+	 * @param timeline 时间线事件列表
+	 * @param expanded 折叠面板是否展开
+	 * @param reasoningContent reasoning 内容（可选）
+	 * @param reasoningElapsedMs reasoning 耗时（可选）
 	 */
-	buildToolCallsCard(toolCalls: ToolCallInfo[], timeline?: TimelineEvent[], expanded: boolean = true): Card {
+	buildToolCallsCard(
+		toolCalls: ToolCallInfo[],
+		timeline?: TimelineEvent[],
+		expanded: boolean = true,
+		reasoningContent?: string,
+		reasoningElapsedMs?: number
+	): Card {
 		const hasTimeline = timeline && timeline.length > 0;
 		console.log("[CARD_TYPE] buildToolCallsCard - 工具调用卡片", {
 			toolCallsCount: toolCalls?.length || 0,
 			timelineCount: timeline?.length || 0,
 			hasTimeline: hasTimeline,
 			expanded: expanded,
+			hasReasoning: !!reasoningContent,
 		});
 		const elements: CardElement[] = [];
 
-		// 添加时间线折叠面板（如果有）
+		// 1. reasoning 折叠面板（如果有）
+		if (reasoningContent) {
+			const durationLabel = reasoningElapsedMs
+				? formatReasoningDuration(reasoningElapsedMs)
+				: "Thought";
+			elements.push({
+				tag: "collapsible_panel",
+				expanded: expanded,
+				header: {
+					title: { tag: "plain_text", content: `💭 ${durationLabel}` },
+				},
+				elements: [{ tag: "markdown", content: reasoningContent, text_size: "notation" }],
+			} as CardElement);
+		}
+
+		// 2. 时间线折叠面板（如果有工具调用）
 		if (hasTimeline) {
 			console.log("[CARD_TYPE] buildToolCallsCard: 使用时间线折叠面板");
 			elements.push(this.buildTimelinePanel(timeline!, expanded));
-		} else {
+		} else if (toolCalls && toolCalls.length > 0) {
 			console.log("[CARD_TYPE] buildToolCallsCard: 使用旧的工具调用列表（无timeline）");
 			// 没有 timeline 时使用旧的工具调用列表
 			elements.push(this.buildToolCallsList(toolCalls));
