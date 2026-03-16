@@ -700,14 +700,17 @@ export class FeishuPlatformContext implements PlatformContext {
 		this.toolCardCreating = false; // 重置工具卡片创建锁
 		this._responseSentTurn = 0; // 重置响应发送标记
 
+		// 【修改】如果已有工具卡片，保留它（防止工具卡片中断）
+		const existingToolCardId = this.cardIds.toolCardId;
+
 		this.logger?.debug("[cardIds] Resetting cardIds", {
 			location: "startThinking",
-			previousToolCardId: this.cardIds.toolCardId,
+			previousToolCardId: existingToolCardId,
 		});
 		this.cardIds = {
 			statusCardId: null,
 			thinkingCardId: null,
-			toolCardId: null,
+			toolCardId: existingToolCardId,  // 保留现有 toolCardId
 		};
 
 		// 重置 CardKit 流式状态（保留启用状态，由 updateStreaming 决定是否使用）
@@ -716,11 +719,14 @@ export class FeishuPlatformContext implements PlatformContext {
 		this.cardKitLastContent = "";
 		this.cardKitClient.resetStreaming();
 
-		// 只创建一张工具卡片（初始为空），传递 quoteMessageId 引用原消息
-		// 使用 buildStatusCard 而不是 buildToolCallsCard，因为后者在空数组时会返回空 elements 导致 400 错误
-		const initialCard = this.cardBuilder.buildStatusCard(undefined, "processing");
-		const messageId = await this.messageSender.sendCard(this.chatId, initialCard, this.quoteMessageId || undefined);
-		this.cardIds.toolCardId = messageId;
+		// 【修改】如果已有工具卡片，不需要创建新卡片
+		if (!this.cardIds.toolCardId) {
+			// 只创建一张工具卡片（初始为空），传递 quoteMessageId 引用原消息
+			// 使用 buildStatusCard 而不是 buildToolCallsCard，因为后者在空数组时会返回空 elements 导致 400 错误
+			const initialCard = this.cardBuilder.buildStatusCard(undefined, "processing");
+			const messageId = await this.messageSender.sendCard(this.chatId, initialCard, this.quoteMessageId || undefined);
+			this.cardIds.toolCardId = messageId;
+		}
 
 		// 更新状态
 		this.currentCardStatus = "thinking";
@@ -881,7 +887,7 @@ export class FeishuPlatformContext implements PlatformContext {
 				// 1. 先发送结果卡片（复用 buildCompleteCard，只显示回答部分，不传 timeline）
 				const resultCard = this.cardBuilder.buildCompleteCard(content, {
 					elapsed,
-					// 不传 timeline 和 toolCalls，只显示回答
+					onlyAnswer: true,  // 只显示回答部分，不显示思考内容
 				});
 				// 转换卡片内容中的 @用户名
 				if (resultCard?.body?.elements) {

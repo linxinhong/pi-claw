@@ -106,9 +106,9 @@ export class CardBuilder {
 	/**
 	 * 构建工具调用卡片（包含 reasoning 和工具调用）
 	 * @param toolCalls 工具调用列表
-	 * @param timeline 时间线事件列表
+	 * @param timeline 时间线事件列表（包含思考摘要和工具调用，按时间顺序展示）
 	 * @param expanded 折叠面板是否展开
-	 * @param reasoningContent reasoning 内容（可选）
+	 * @param reasoningContent reasoning 内容（保留参数但不单独显示，通过 timeline 展示）
 	 * @param reasoningElapsedMs reasoning 耗时（可选）
 	 */
 	buildToolCallsCard(
@@ -128,32 +128,14 @@ export class CardBuilder {
 		});
 		const elements: CardElement[] = [];
 
-		// 1. 合并的思考过程折叠面板（reasoning + 时间线）
-		if (reasoningContent || hasTimeline) {
+		// 【修改】只用 timeline 展示，不单独显示 reasoningContent
+		// 思考内容通过 timeline 中的 thinking 事件来展示
+		if (hasTimeline) {
 			const durationLabel = reasoningElapsedMs
 				? formatReasoningDuration(reasoningElapsedMs)
 				: "Thought";
-			const panelElements: CardElement[] = [];
 
-			// reasoning 内容（如果有）
-			if (reasoningContent) {
-				panelElements.push({
-					tag: "markdown",
-					content: `### 💭 ${durationLabel}\n${reasoningContent}`,
-					text_size: "notation",
-				});
-				// 如果有工具调用，添加分隔线
-				if (hasTimeline) {
-					panelElements.push({ tag: "hr" });
-				}
-			}
-
-			// 工具调用时间线（如果有）
-			if (hasTimeline) {
-				console.log("[CARD_TYPE] buildToolCallsCard: 使用合并的时间线折叠面板");
-				panelElements.push(this.buildTimelineContent(timeline!));
-			}
-
+			console.log("[CARD_TYPE] buildToolCallsCard: 使用时间线折叠面板（按时间顺序展示）");
 			elements.push({
 				tag: "collapsible_panel",
 				expanded: expanded,
@@ -171,7 +153,7 @@ export class CardBuilder {
 				border: { color: "grey", corner_radius: "5px" },
 				vertical_spacing: "8px",
 				padding: "8px 8px 8px 8px",
-				elements: panelElements,
+				elements: [this.buildTimelineContent(timeline!)],
 			} as CardElement);
 		} else if (toolCalls && toolCalls.length > 0) {
 			console.log("[CARD_TYPE] buildToolCallsCard: 使用旧的工具调用列表（无timeline）");
@@ -322,10 +304,42 @@ export class CardBuilder {
 		timeline?: TimelineEvent[];
 		expanded?: boolean;  // 折叠面板是否展开（完成后应该折叠）
 		reasoningElapsedMs?: number;  // 思考耗时（毫秒）
+		onlyAnswer?: boolean;  // 只显示回答部分（不显示思考内容折叠面板）
 	}): Card {
 		const elements: CardElement[] = [];
 
-		// 分离思考和回答内容
+		// 如果 onlyAnswer=true，只显示回答内容（用于结果卡片）
+		if (options?.onlyAnswer) {
+			// 分离思考和回答内容
+			const { answerText } = splitReasoningText(content);
+			const displayContent = answerText || content;
+
+			// 只显示回答内容
+			elements.push({
+				tag: "div",
+				text: {
+					tag: "lark_md",
+					content: this.formatContent(displayContent),
+				},
+			});
+
+			// 耗时信息
+			if (options?.elapsed !== undefined) {
+				elements.push({
+					tag: "markdown",
+					content: `⏱️ 耗时: ${this.formatElapsed(options.elapsed)}`,
+					text_size: "notation",
+				});
+			}
+
+			return {
+				schema: "2.0",
+				config: this.defaultConfig,
+				body: { elements },
+			};
+		}
+
+		// 原有逻辑：分离思考和回答内容
 		const { reasoningText, answerText } = splitReasoningText(content);
 
 		// 1. 思考内容折叠面板（如果有）
