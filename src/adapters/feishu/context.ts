@@ -819,6 +819,9 @@ export class FeishuPlatformContext implements PlatformContext {
 			return;
 		}
 
+		// ✅ 立即设置标记，防止并发调用重复进入
+		this._responseSentTurn = this.currentTurn;
+
 		this.logger?.debug("[finishThinking] Called", {
 			stopReason,
 			toolCardId: this.cardIds.toolCardId,
@@ -902,14 +905,10 @@ export class FeishuPlatformContext implements PlatformContext {
 				);
 				await this.messageSender.updateCard(this.cardIds.toolCardId, collapsedCard);
 				this.logger?.debug("[finishThinking] Thinking card collapsed");
-
-				// ✅ 双卡片发送成功，设置防重入标记
-				this._responseSentTurn = this.currentTurn;
 			} catch (error: any) {
 				// 检查是否是消息不可用错误（消息已撤回/删除）
 				if (isMessageUnavailableError(error)) {
 					this.logger?.debug("Card update skipped - message unavailable");
-					this._responseSentTurn = this.currentTurn;
 					return;
 				}
 
@@ -936,13 +935,11 @@ export class FeishuPlatformContext implements PlatformContext {
 				// 降级发送文本（仅在不是频率限制时）
 				if (!isRateLimit && content) {
 					await this.messageSender.sendText(this.chatId, content, this.quoteMessageId || undefined);
-					this._responseSentTurn = this.currentTurn;  // ✅ 降级发送后也设置标记
 				}
 			}
 		} else if (content) {
 			// 没有思考卡片或没有思考内容时，直接发送结果
 			await this.messageSender.sendText(this.chatId, content, this.quoteMessageId || undefined);
-			this._responseSentTurn = this.currentTurn;  // ✅ 直接发送后也设置标记
 		}
 
 		// 只有在最终回复时才清理状态
@@ -954,7 +951,6 @@ export class FeishuPlatformContext implements PlatformContext {
 			this.currentTurn = 0; // 重置 turn 轮次
 			this.thinkingContent = "";
 			this.pendingContent = "";
-			this._responseSentTurn = this.currentTurn;  // 保持一致性
 
 			// 重置 reasoning 耗时追踪
 			this.reasoningStartTime = null;
@@ -1020,9 +1016,6 @@ export class FeishuPlatformContext implements PlatformContext {
 		await this.cardKitClient.updateCard(this.cardKitCardId, finalCard);
 
 		this.logger?.debug("[CardKit] Streaming finished successfully");
-
-		// 标记响应已发送
-		this._responseSentTurn = this.currentTurn;
 
 		// 清理状态
 		this.currentCardStatus = "complete";
@@ -1468,7 +1461,6 @@ export class FeishuPlatformContext implements PlatformContext {
 	 */
 	async finalizeResponse(content: string): Promise<void> {
 		await this.finishStatus(content);
-		this._responseSentTurn = this.currentTurn;
 	}
 
 	// ========================================================================
