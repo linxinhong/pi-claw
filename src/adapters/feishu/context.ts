@@ -80,6 +80,9 @@ export class FeishuPlatformContext implements PlatformContext {
 	// 当前 turn 轮次
 	private currentTurn: number = 0;
 
+	// 记录已发送响应的 turn 编号（用于防止跨 turn 的竞态条件）
+	private _responseSentTurn: number = 0;
+
 	// 工具卡片创建锁（防止并发创建多张卡片）
 	private toolCardCreating: boolean = false;
 
@@ -97,9 +100,6 @@ export class FeishuPlatformContext implements PlatformContext {
 	private cardKitMessageId: string | null = null; // CardKit 卡片消息 ID
 	private cardKitLastContent: string = "";       // 上次流式更新的内容（用于去重）
 	private readonly STREAMING_DEBOUNCE_MS = 100;  // 流式更新防抖时间
-
-	// 响应是否已发送标志
-	private _responseSent: boolean = false;
 
 	// 引用的消息 ID（用于引用回复原消息）
 	private quoteMessageId: string | null = null;
@@ -698,7 +698,7 @@ export class FeishuPlatformContext implements PlatformContext {
 		this.timeline = []; // 清空时间线
 		this.currentTurn = 0; // 重置 turn 轮次
 		this.toolCardCreating = false; // 重置工具卡片创建锁
-		this._responseSent = false; // 重置响应发送标记
+		this._responseSentTurn = 0; // 重置响应发送标记
 
 		this.logger?.debug("[cardIds] Resetting cardIds", {
 			location: "startThinking",
@@ -810,9 +810,12 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * @param stopReason 停止原因（"stop" 或 "end_turn" 表示最终回复，其他值表示中间 turn）
 	 */
 	async finishThinking(content: string, stopReason?: string): Promise<void> {
-		// 防重入保护：如果已经发送过响应，跳过
-		if (this._responseSent) {
-			this.logger?.debug("[finishThinking] Already sent, skipping");
+		// 防重入保护：使用 turn 编号比较，防止跨 turn 的竞态条件
+		if (this._responseSentTurn >= this.currentTurn) {
+			this.logger?.debug("[finishThinking] Already sent for this turn, skipping", {
+				responseSentTurn: this._responseSentTurn,
+				currentTurn: this.currentTurn,
+			});
 			return;
 		}
 
@@ -901,12 +904,12 @@ export class FeishuPlatformContext implements PlatformContext {
 				this.logger?.debug("[finishThinking] Thinking card collapsed");
 
 				// ✅ 双卡片发送成功，设置防重入标记
-				this._responseSent = true;
+				this._responseSentTurn = this.currentTurn;
 			} catch (error: any) {
 				// 检查是否是消息不可用错误（消息已撤回/删除）
 				if (isMessageUnavailableError(error)) {
 					this.logger?.debug("Card update skipped - message unavailable");
-					this._responseSent = true;
+					this._responseSentTurn = this.currentTurn;
 					return;
 				}
 
@@ -933,13 +936,13 @@ export class FeishuPlatformContext implements PlatformContext {
 				// 降级发送文本（仅在不是频率限制时）
 				if (!isRateLimit && content) {
 					await this.messageSender.sendText(this.chatId, content, this.quoteMessageId || undefined);
-					this._responseSent = true;  // ✅ 降级发送后也设置标记
+					this._responseSentTurn = this.currentTurn;  // ✅ 降级发送后也设置标记
 				}
 			}
 		} else if (content) {
 			// 没有思考卡片或没有思考内容时，直接发送结果
 			await this.messageSender.sendText(this.chatId, content, this.quoteMessageId || undefined);
-			this._responseSent = true;  // ✅ 直接发送后也设置标记
+			this._responseSentTurn = this.currentTurn;  // ✅ 直接发送后也设置标记
 		}
 
 		// 只有在最终回复时才清理状态
@@ -951,7 +954,7 @@ export class FeishuPlatformContext implements PlatformContext {
 			this.currentTurn = 0; // 重置 turn 轮次
 			this.thinkingContent = "";
 			this.pendingContent = "";
-			this._responseSent = true;
+			this._responseSentTurn = this.currentTurn;  // 保持一致性
 
 			// 重置 reasoning 耗时追踪
 			this.reasoningStartTime = null;
@@ -1019,7 +1022,7 @@ export class FeishuPlatformContext implements PlatformContext {
 		this.logger?.debug("[CardKit] Streaming finished successfully");
 
 		// 标记响应已发送
-		this._responseSent = true;
+		this._responseSentTurn = this.currentTurn;
 
 		// 清理状态
 		this.currentCardStatus = "complete";
@@ -1118,8 +1121,8 @@ export class FeishuPlatformContext implements PlatformContext {
 		if (this.toolCalls.length === 0) return;
 
 		// 如果响应已发送，不再更新/创建工具卡片
-		if (this._responseSent) {
-			this.logger?.debug("[doUpdateOrCreateToolCard] Response already sent, skipping");
+		if (this._responseSentTurn >= this.currentTurn) {
+			this.logger?.debug("[doUpdateOrCreateToolCard] Response already sent for this turn, skipping");
 			return;
 		}
 
@@ -1220,7 +1223,7 @@ export class FeishuPlatformContext implements PlatformContext {
 	 */
 	startNewTurn(): void {
 		this.currentTurn++;
-		this._responseSent = false;  // 重置响应标记，允许新 turn 发送响应
+		// 不再需要重置 _responseSent，改用 turn 编号比较
 	}
 
 	/**
@@ -1457,7 +1460,7 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * 检查响应是否已发送
 	 */
 	isResponseSent(): boolean {
-		return this._responseSent;
+		return this._responseSentTurn >= this.currentTurn;
 	}
 
 	/**
@@ -1465,7 +1468,7 @@ export class FeishuPlatformContext implements PlatformContext {
 	 */
 	async finalizeResponse(content: string): Promise<void> {
 		await this.finishStatus(content);
-		this._responseSent = true;
+		this._responseSentTurn = this.currentTurn;
 	}
 
 	// ========================================================================
