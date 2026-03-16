@@ -810,22 +810,26 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * @param stopReason 停止原因（"stop" 或 "end_turn" 表示最终回复，其他值表示中间 turn）
 	 */
 	async finishThinking(content: string, stopReason?: string): Promise<void> {
-		// 防重入保护：使用 turn 编号比较，防止跨 turn 的竞态条件
-		if (this._responseSentTurn >= this.currentTurn) {
-			this.logger?.debug("[finishThinking] Already sent for this turn, skipping", {
-				responseSentTurn: this._responseSentTurn,
-				currentTurn: this.currentTurn,
-			});
-			return;
-		}
+		// 判断是否是最终回复（提前计算）
+		const isFinalResponse = stopReason === "stop" || stopReason === "end_turn";
 
-		// ✅ 立即设置标记，防止并发调用重复进入
-		this._responseSentTurn = this.currentTurn;
+		// 防重入保护：只在最终回复时检查和设置
+		if (isFinalResponse) {
+			if (this._responseSentTurn >= this.currentTurn) {
+				this.logger?.debug("[finishThinking] Already sent for this turn, skipping", {
+					responseSentTurn: this._responseSentTurn,
+					currentTurn: this.currentTurn,
+				});
+				return;
+			}
+			// 立即设置标记，防止并发调用重复进入
+			this._responseSentTurn = this.currentTurn;
+		}
 
 		this.logger?.debug("[finishThinking] Called", {
 			stopReason,
 			toolCardId: this.cardIds.toolCardId,
-			isFinalResponse: stopReason === "stop" || stopReason === "end_turn",
+			isFinalResponse,
 		});
 
 		// 清理节流定时器
@@ -841,9 +845,6 @@ export class FeishuPlatformContext implements PlatformContext {
 
 		// 获取时间线
 		const timeline = this.getTimeline();
-
-		// 判断是否是最终回复
-		const isFinalResponse = stopReason === "stop" || stopReason === "end_turn";
 
 		// 只有最终回复时才更新卡片或发送消息
 		if (!isFinalResponse) {
