@@ -950,6 +950,7 @@ export class FeishuPlatformContext implements PlatformContext {
 			this.toolCalls = [];
 			this.timeline = []; // 清空时间线
 			this.currentTurn = 0; // 重置 turn 轮次
+			this._responseSentTurn = 0; // 同时重置响应标记
 			this.thinkingContent = "";
 			this.pendingContent = "";
 
@@ -1024,6 +1025,7 @@ export class FeishuPlatformContext implements PlatformContext {
 		this.toolCalls = [];
 		this.timeline = [];
 		this.currentTurn = 0;
+		this._responseSentTurn = 0; // 同时重置响应标记
 		this.thinkingContent = "";
 		this.pendingContent = "";
 
