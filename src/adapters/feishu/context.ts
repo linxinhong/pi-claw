@@ -814,8 +814,9 @@ export class FeishuPlatformContext implements PlatformContext {
 		const isFinalResponse = stopReason === "stop" || stopReason === "end_turn";
 
 		// 防重入保护：只在最终回复时检查和设置
+		// 注意：_responseSentTurn = 0 表示未发送状态，只有 > 0 才表示已发送
 		if (isFinalResponse) {
-			if (this._responseSentTurn >= this.currentTurn) {
+			if (this._responseSentTurn > 0 && this._responseSentTurn >= this.currentTurn) {
 				this.logger?.debug("[finishThinking] Already sent for this turn, skipping", {
 					responseSentTurn: this._responseSentTurn,
 					currentTurn: this.currentTurn,
@@ -1117,7 +1118,8 @@ export class FeishuPlatformContext implements PlatformContext {
 		if (this.toolCalls.length === 0) return;
 
 		// 如果响应已发送，不再更新/创建工具卡片
-		if (this._responseSentTurn >= this.currentTurn) {
+		// 注意：_responseSentTurn = 0 表示未发送状态，只有 > 0 才表示已发送
+		if (this._responseSentTurn > 0 && this._responseSentTurn >= this.currentTurn) {
 			this.logger?.debug("[doUpdateOrCreateToolCard] Response already sent for this turn, skipping");
 			return;
 		}
@@ -1454,9 +1456,10 @@ export class FeishuPlatformContext implements PlatformContext {
 
 	/**
 	 * 检查响应是否已发送
+	 * 注意：_responseSentTurn = 0 表示未发送状态，只有 > 0 才表示已发送
 	 */
 	isResponseSent(): boolean {
-		return this._responseSentTurn >= this.currentTurn;
+		return this._responseSentTurn > 0 && this._responseSentTurn >= this.currentTurn;
 	}
 
 	/**
