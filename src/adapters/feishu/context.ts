@@ -1117,6 +1117,12 @@ export class FeishuPlatformContext implements PlatformContext {
 	private async doUpdateOrCreateToolCard(): Promise<void> {
 		if (this.toolCalls.length === 0) return;
 
+		// 如果响应已发送，不再更新/创建工具卡片
+		if (this._responseSent) {
+			this.logger?.debug("[doUpdateOrCreateToolCard] Response already sent, skipping");
+			return;
+		}
+
 		try {
 			// 获取时间线并传入工具卡片
 			const timeline = this.getTimeline();
@@ -1214,6 +1220,7 @@ export class FeishuPlatformContext implements PlatformContext {
 	 */
 	startNewTurn(): void {
 		this.currentTurn++;
+		this._responseSent = false;  // 重置响应标记，允许新 turn 发送响应
 	}
 
 	/**
