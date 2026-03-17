@@ -957,7 +957,8 @@ export class FeishuPlatformContext implements PlatformContext {
 			this.toolCalls = [];
 			this.timeline = []; // 清空时间线
 			this.currentTurn = 0; // 重置 turn 轮次
-			this._responseSentTurn = 0; // 同时重置响应标记
+			// 不重置 _responseSentTurn，保持防重入保护
+			// _responseSentTurn 只在 startThinking 中重置（新会话开始时）
 			this.thinkingContent = "";
 			this.pendingContent = "";
 
