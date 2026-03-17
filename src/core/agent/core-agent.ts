@@ -573,6 +573,13 @@ export class CoreAgent {
 								await (platformContext as any).finishThinking(finalResponse, isFinalResponse ? "stop" : stopReason);
 							}
 
+							// 立即取消订阅，防止后续事件（如新 turn 的工具调用）被处理
+							if (state.unsubscribe) {
+								log.logInfo(`[Agent] Unsubscribing from session events after message_end`);
+								state.unsubscribe();
+								state.unsubscribe = null;
+							}
+
 							resolve(finalResponse);
 						}
 					} catch (error) {
