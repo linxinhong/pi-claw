@@ -526,6 +526,7 @@ export class CoreAgent {
 						} else if (agentEvent.type === "turn_end") {
 							// Turn 结束
 							const stopReason = (agentEvent as any).stopReason || "stop";
+							log.logInfo(`[Agent] Received turn_end event, stopReason: ${stopReason}`);
 
 							// 触发 agent:turn-end hook
 							if (hookManager?.hasHooks(HOOK_NAMES.AGENT_TURN_END)) {
@@ -556,6 +557,7 @@ export class CoreAgent {
 								}, 100);
 							}
 						} else if (agentEvent.type === "message_end" && agentEvent.message.role === "assistant") {
+							log.logInfo(`[Agent] Received message_end event, role: ${agentEvent.message.role}, stopReason: ${agentEvent.message.stopReason || "stop"}`);
 							const assistantMsg = agentEvent.message as any;
 							const stopReason = assistantMsg.stopReason || "stop";
 							if (assistantMsg.stopReason) runState.stopReason = assistantMsg.stopReason;
