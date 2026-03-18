@@ -766,8 +766,9 @@ export class FeishuPlatformContext implements PlatformContext {
 
 		// 统一使用 updateOrCreateToolCard 进行更新
 		// 这确保 thinkingContent 和 reasoningElapsedMs 被正确传递
+		// 注意：不等待防抖完成，让定时器在后台执行（fire-and-forget）
 		if (this.cardIds.toolCardId) {
-			await this.updateOrCreateToolCard();
+			void this.updateOrCreateToolCard();
 		}
 	}
 
