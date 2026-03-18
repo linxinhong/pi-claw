@@ -419,6 +419,9 @@ export class CoreAgent {
 				errorMessage: undefined,
 			};
 
+			// 【修复】防止 finishThinking 被重复调用
+			let finishThinkingCalled = false;
+
 			// Turn 计数器
 			let turnNumber = 0;
 
@@ -536,7 +539,9 @@ export class CoreAgent {
 
 							// 如果是最终 turn 且没有 message_end 事件，手动调用 finishThinking
 							const isFinalTurn = stopReason === "stop" || stopReason === "end_turn" || stopReason === "error";
-							if (isFinalTurn && (platformContext as any).finishThinking) {
+							// 【修复】防止 finishThinking 被重复调用
+							if (isFinalTurn && !finishThinkingCalled && (platformContext as any).finishThinking) {
+								finishThinkingCalled = true;
 								// 从 platformContext 获取缓存的内容
 								const lastContent = (platformContext as any).getLastStreamingContent?.() || "";
 								if (lastContent) {
@@ -568,7 +573,9 @@ export class CoreAgent {
 							// 完成思考卡片（传递 stopReason 以区分中间 turn 和最终 turn）
 							// 注意：error 也视为最终回复，需要显示给用户
 							const isFinalResponse = stopReason === "stop" || stopReason === "end_turn" || stopReason === "error";
-							if ((platformContext as any).finishThinking) {
+							// 【修复】防止 finishThinking 被重复调用
+							if (!finishThinkingCalled && (platformContext as any).finishThinking) {
+								finishThinkingCalled = true;
 								log.logInfo(`[Agent] Calling finishThinking with content: "${finalResponse.slice(0, 50)}...", stopReason: ${stopReason}`);
 								await (platformContext as any).finishThinking(finalResponse, isFinalResponse ? "stop" : stopReason);
 							}
