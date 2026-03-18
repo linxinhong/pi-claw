@@ -764,33 +764,10 @@ export class FeishuPlatformContext implements PlatformContext {
 			return;
 		}
 
-		// 使用防抖更新工具卡片
+		// 统一使用 updateOrCreateToolCard 进行更新
+		// 这确保 thinkingContent 和 reasoningElapsedMs 被正确传递
 		if (this.cardIds.toolCardId) {
-			// 清除之前的定时器
-			if (this.toolCardUpdateTimer) {
-				clearTimeout(this.toolCardUpdateTimer);
-			}
-
-			// 设置新的防抖定时器
-			this.toolCardUpdateTimer = setTimeout(async () => {
-				// 前置检查：消息是否仍然可用
-				if (isMessageUnavailable(this.cardIds.toolCardId ?? undefined)) {
-					this.logger?.debug("Skipping tool card update - message unavailable");
-					return;
-				}
-
-				try {
-					const timeline = this.getTimeline();
-					// 思考过程中展开折叠面板
-					const toolCard = this.cardBuilder.buildToolCallsCard(this.toolCalls, timeline, true);
-					await this.messageSender.updateCard(this.cardIds.toolCardId!, toolCard);
-				} catch (error: any) {
-					const errorMsg = String(error?.message || error);
-					if (!errorMsg.includes("230020") && error?.code !== 230020) {
-						this.logger?.error("Failed to update tool card with thinking", undefined, error as Error);
-					}
-				}
-			}, this.TOOL_CARD_DEBOUNCE_MS);
+			await this.updateOrCreateToolCard();
 		}
 	}
 
@@ -1101,7 +1078,9 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * 使用防抖机制合并快速连续的更新请求
 	 */
 	private async updateOrCreateToolCard(): Promise<void> {
-		if (this.toolCalls.length === 0) return;
+		// 如果没有工具调用且没有现有卡片，不需要更新
+		// 但如果有现有卡片（即使没有工具调用），也应该更新（可能只有思考内容）
+		if (this.toolCalls.length === 0 && !this.cardIds.toolCardId) return;
 
 		// 清除之前的待处理定时器
 		if (this.toolCardUpdateTimer) {
