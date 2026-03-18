@@ -88,6 +88,7 @@ export class FeishuPlatformContext implements PlatformContext {
 
 	// 工具卡片更新防抖
 	private toolCardUpdateTimer?: NodeJS.Timeout;
+	private toolCardUpdatePromise?: Promise<void>; // 追踪待处理的工具卡片更新
 	private readonly TOOL_CARD_DEBOUNCE_MS = 500; // 防抖时间
 
 	// 流式卡片更新缓存（避免内容无变化时重复更新）
@@ -824,6 +825,9 @@ export class FeishuPlatformContext implements PlatformContext {
 			isFinalResponse,
 		});
 
+		// 【修复】等待待处理的工具卡片更新完成，避免竞争条件
+		await this.waitForToolCardUpdate();
+
 		// 清理节流定时器
 		this.cleanupThrottle();
 
@@ -971,6 +975,10 @@ export class FeishuPlatformContext implements PlatformContext {
 
 	/**
 	 * 完成 CardKit 流式更新
+	 * 
+	 * 【修复】实现与传统 patch 模式一致的双卡片设计：
+	 * 1. 发送结果卡片（只显示回答部分）
+	 * 2. 折叠 CardKit 工具卡片（显示思考过程）
 	 */
 	private async finishCardKitStreaming(
 		content: string,
@@ -979,36 +987,82 @@ export class FeishuPlatformContext implements PlatformContext {
 	): Promise<void> {
 		if (!this.cardKitCardId) return;
 
-		this.logger?.debug("[CardKit] Finishing streaming", { cardId: this.cardKitCardId });
+		this.logger?.debug("[CardKit] Finishing streaming with dual-card design", { cardId: this.cardKitCardId });
 
-		// 1. 关闭流式模式
-		await this.cardKitClient.setStreamingMode(this.cardKitCardId, false);
+		// 检查是否有思考内容
+		const hasThinkingContent = this.toolCalls.length > 0 || !!this.thinkingContent || timeline.length > 0;
 
-		// 2. 构建最终卡片
-		const finalCard = this.cardBuilder.buildCompleteCard(content, {
-			elapsed,
-			toolCalls: this.toolCalls,
-			timeline,
-			expanded: false,
-			reasoningElapsedMs: this.reasoningElapsedMs,
-		});
-
-		// 转换卡片内容中的 @用户名
-		if (finalCard?.body?.elements) {
-			for (const element of finalCard.body.elements) {
-				if (element.text?.content) {
-					element.text.content = await this.larkClient.convertAtMentions(this.chatId, element.text.content);
+		try {
+			if (hasThinkingContent) {
+				// 【双卡片设计】先发送结果卡片（只显示回答部分）
+				this.logger?.debug("[CardKit] Sending result card");
+				const resultCard = this.cardBuilder.buildCompleteCard(content, {
+					elapsed,
+					onlyAnswer: true,  // 只显示回答部分
+				});
+				// 转换 @用户名
+				if (resultCard?.body?.elements) {
+					for (const element of resultCard.body.elements) {
+						if (element.text?.content) {
+							element.text.content = await this.larkClient.convertAtMentions(this.chatId, element.text.content);
+						}
+						if (element.content) {
+							element.content = await this.larkClient.convertAtMentions(this.chatId, element.content);
+						}
+					}
 				}
-				if (element.content) {
-					element.content = await this.larkClient.convertAtMentions(this.chatId, element.content);
+				await this.messageSender.sendCard(this.chatId, resultCard, this.quoteMessageId || undefined);
+				this.logger?.debug("[CardKit] Result card sent successfully");
+
+				// 【双卡片设计】然后折叠 CardKit 工具卡片
+				this.logger?.debug("[CardKit] Collapsing tool card");
+				await this.cardKitClient.setStreamingMode(this.cardKitCardId, false);
+				const collapsedCard = this.cardBuilder.buildToolCallsCard(
+					this.toolCalls,
+					timeline,
+					false,  // expanded = false，折叠
+					this.thinkingContent,
+					this.reasoningElapsedMs
+				);
+				await this.cardKitClient.updateCard(this.cardKitCardId, collapsedCard);
+				this.logger?.debug("[CardKit] Tool card collapsed successfully");
+			} else {
+				// 没有思考内容，直接更新为完整卡片
+				this.logger?.debug("[CardKit] No thinking content, updating to complete card");
+				await this.cardKitClient.setStreamingMode(this.cardKitCardId, false);
+				const finalCard = this.cardBuilder.buildCompleteCard(content, {
+					elapsed,
+					toolCalls: this.toolCalls,
+					timeline,
+					expanded: false,
+					reasoningElapsedMs: this.reasoningElapsedMs,
+				});
+				// 转换 @用户名
+				if (finalCard?.body?.elements) {
+					for (const element of finalCard.body.elements) {
+						if (element.text?.content) {
+							element.text.content = await this.larkClient.convertAtMentions(this.chatId, element.text.content);
+						}
+						if (element.content) {
+							element.content = await this.larkClient.convertAtMentions(this.chatId, element.content);
+						}
+					}
 				}
+				await this.cardKitClient.updateCard(this.cardKitCardId, finalCard);
 			}
+
+			this.logger?.debug("[CardKit] Streaming finished successfully");
+		} catch (error: any) {
+			// 检查是否是权限错误，如果是则重新抛出
+			const errorCode = error?.code ?? error?.response?.data?.code;
+			if (errorCode === 99991672) {
+				this.logger?.warn("[CardKit] Permission error in finishCardKitStreaming, re-throwing");
+				throw error;
+			}
+			this.logger?.error("[CardKit] Failed to finish streaming", undefined, error as Error);
+			// 降级：发送文本消息
+			await this.messageSender.sendText(this.chatId, content, this.quoteMessageId || undefined);
 		}
-
-		// 3. 更新为最终卡片
-		await this.cardKitClient.updateCard(this.cardKitCardId, finalCard);
-
-		this.logger?.debug("[CardKit] Streaming finished successfully");
 
 		// 清理状态
 		this.currentCardStatus = "complete";
@@ -1094,13 +1148,28 @@ export class FeishuPlatformContext implements PlatformContext {
 		}
 
 		// 延迟更新，合并快速连续的调用
-		return new Promise((resolve) => {
+		// 【修复】追踪 Promise，以便 finishThinking 可以等待更新完成
+		this.toolCardUpdatePromise = new Promise((resolve) => {
 			this.toolCardUpdateTimer = setTimeout(async () => {
 				this.toolCardUpdateTimer = undefined;
 				await this.doUpdateOrCreateToolCard();
 				resolve();
+				this.toolCardUpdatePromise = undefined;
 			}, this.TOOL_CARD_DEBOUNCE_MS);
 		});
+		return this.toolCardUpdatePromise;
+	}
+
+	/**
+	 * 等待待处理的工具卡片更新完成
+	 * 【修复】确保在 finishThinking 之前所有工具卡片更新都已完成
+	 */
+	private async waitForToolCardUpdate(): Promise<void> {
+		if (this.toolCardUpdatePromise) {
+			this.logger?.debug("[waitForToolCardUpdate] Waiting for pending tool card update");
+			await this.toolCardUpdatePromise;
+			this.logger?.debug("[waitForToolCardUpdate] Tool card update completed");
+		}
 	}
 
 	/**
@@ -1230,8 +1299,11 @@ export class FeishuPlatformContext implements PlatformContext {
 	 */
 	addThinkingToTimeline(content: string): void {
 		// addThinkingToTimeline 调试日志已禁用
-		// 截断思考内容（最多显示 50 个字符）
-		const truncated = content.length > 50 ? content.slice(0, 50) + "..." : content;
+		// 【修复】增加思考内容显示长度（从 50 增加到 200 字符）
+		const MAX_THINKING_LENGTH = 200;
+		const truncated = content.length > MAX_THINKING_LENGTH 
+			? content.slice(0, MAX_THINKING_LENGTH) + "..." 
+			: content;
 
 		const currentTurn = this.currentTurn || 1;
 		
