@@ -1102,7 +1102,9 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * 实际执行工具卡片更新
 	 */
 	private async doUpdateOrCreateToolCard(): Promise<void> {
-		if (this.toolCalls.length === 0) return;
+		// 如果没有工具调用且没有现有卡片，不需要更新
+		// 但如果有现有卡片（即使没有工具调用），也应该更新（可能只有思考内容）
+		if (this.toolCalls.length === 0 && !this.cardIds.toolCardId) return;
 
 		// 如果响应已发送，不再更新/创建工具卡片
 		// 注意：_responseSentTurn = 0 表示未发送状态，只有 > 0 才表示已发送
