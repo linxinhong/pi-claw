@@ -840,8 +840,11 @@ export class FeishuPlatformContext implements PlatformContext {
 
 		// 只有最终回复时才更新卡片或发送消息
 		if (!isFinalResponse) {
-			// 非最终回复（如 toolUse），只更新时间线，不结束思考
-			this.logger?.debug(`[FeishuContext] Non-final stopReason: ${stopReason}, skipping finish`);
+			// 非最终回复（如 toolUse），重置响应标记，允许后续更新
+			this._responseSentTurn = 0;
+			this.logger?.debug(`[FeishuContext] Non-final stopReason: ${stopReason}, resetting response flag`, {
+				currentTurn: this.currentTurn,
+			});
 			return;
 		}
 
@@ -1217,9 +1220,8 @@ export class FeishuPlatformContext implements PlatformContext {
 	 */
 	startNewTurn(): void {
 		this.currentTurn++;
-		// 重置响应发送标记，允许新 turn 发送响应
-		this._responseSentTurn = 0;
-		this.logger?.debug("[startNewTurn] Reset response sent flag", {
+		// 不在这里重置 _responseSentTurn，而是在 finishThinking(toolUse) 中重置
+		this.logger?.debug("[startNewTurn] Turn counter incremented", {
 			currentTurn: this.currentTurn,
 		});
 	}
