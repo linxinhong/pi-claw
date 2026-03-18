@@ -82,6 +82,8 @@ export class FeishuPlatformContext implements PlatformContext {
 
 	// 记录已发送响应的 turn 编号（用于防止跨 turn 的竞态条件）
 	private _responseSentTurn: number = 0;
+	// 【修复】同步锁，防止并发进入 finishThinking
+	private _responseSendingLock: boolean = false;
 
 	// 工具卡片创建锁（防止并发创建多张卡片）
 	private toolCardCreating: boolean = false;
@@ -801,13 +803,25 @@ export class FeishuPlatformContext implements PlatformContext {
 	 * @param content 最终回复内容
 	 * @param stopReason 停止原因（"stop" 或 "end_turn" 表示最终回复，其他值表示中间 turn）
 	 */
+	/**
+	 * 完成思考，显示最终回复
+	 * @param content 最终回复内容
+	 * @param stopReason 停止原因（"stop" 或 "end_turn" 表示最终回复，其他值表示中间 turn）
+	 */
 	async finishThinking(content: string, stopReason?: string): Promise<void> {
 		// 判断是否是最终回复（提前计算）
 		const isFinalResponse = stopReason === "stop" || stopReason === "end_turn";
 
-		// 防重入保护：只在最终回复时检查和设置
-		// 注意：_responseSentTurn = 0 表示未发送状态，只有 > 0 才表示已发送
+		// 【修复】防重入保护：使用同步锁立即阻止并发调用
 		if (isFinalResponse) {
+			// 第一步：同步锁检查，立即阻止并发进入
+			if (this._responseSendingLock) {
+				this.logger?.debug("[finishThinking] Another response is being sent, skipping", {
+					currentTurn: this.currentTurn,
+				});
+				return;
+			}
+			// 第二步：Turn 级别检查，防止同一 turn 重复发送
 			if (this._responseSentTurn > 0 && this._responseSentTurn >= this.currentTurn) {
 				this.logger?.debug("[finishThinking] Already sent for this turn, skipping", {
 					responseSentTurn: this._responseSentTurn,
@@ -815,7 +829,9 @@ export class FeishuPlatformContext implements PlatformContext {
 				});
 				return;
 			}
-			// 立即设置标记，防止并发调用重复进入
+			// 立即获取锁
+			this._responseSendingLock = true;
+			// 设置 turn 标记
 			this._responseSentTurn = this.currentTurn;
 		}
 
@@ -825,151 +841,159 @@ export class FeishuPlatformContext implements PlatformContext {
 			isFinalResponse,
 		});
 
-		// 【修复】等待待处理的工具卡片更新完成，避免竞争条件
-		await this.waitForToolCardUpdate();
+		// 【修复】使用 try-finally 确保锁一定会被释放
+		try {
+			// 【修复】等待待处理的工具卡片更新完成，避免竞争条件
+			await this.waitForToolCardUpdate();
 
-		// 清理节流定时器
-		this.cleanupThrottle();
+			// 清理节流定时器
+			this.cleanupThrottle();
 
-		// 计算耗时
-		const elapsed = this.thinkingStartTime ? Date.now() - this.thinkingStartTime : undefined;
+			// 计算耗时
+			const elapsed = this.thinkingStartTime ? Date.now() - this.thinkingStartTime : undefined;
 
-		// 计算 reasoning 耗时
-		if (this.reasoningStartTime) {
-			this.reasoningElapsedMs = Date.now() - this.reasoningStartTime;
-		}
-
-		// 获取时间线
-		const timeline = this.getTimeline();
-
-		// 只有最终回复时才更新卡片或发送消息
-		if (!isFinalResponse) {
-			this.logger?.debug(`[FeishuContext] Non-final stopReason: ${stopReason}, returning early`);
-			return;
-		}
-
-		// 如果使用 CardKit 流式模式，需要完成流式更新
-		if (this.useCardKitStreaming && this.cardKitCardId) {
-			try {
-				await this.finishCardKitStreaming(content, elapsed, timeline);
-				return;
-			} catch (error: any) {
-				this.logger?.error("[CardKit] Failed to finish streaming, falling back to patch mode", undefined, error as Error);
-				// 降级到传统模式继续处理
-				this.useCardKitStreaming = false;
+			// 计算 reasoning 耗时
+			if (this.reasoningStartTime) {
+				this.reasoningElapsedMs = Date.now() - this.reasoningStartTime;
 			}
-		}
 
-		// 检查是否有思考内容（toolCalls 或 reasoning）
-		const hasThinkingContent = this.toolCalls.length > 0 || !!this.thinkingContent;
+			// 获取时间线
+			const timeline = this.getTimeline();
 
-		// 双卡片设计：如果有思考卡片且有思考内容
-		if (this.cardIds.toolCardId && hasThinkingContent) {
-			try {
-				this.logger?.debug("[finishThinking] Starting dual-card flow", {
-					toolCardId: this.cardIds.toolCardId,
-					toolCallsCount: this.toolCalls.length,
-					hasReasoning: !!this.thinkingContent,
-				});
+			// 只有最终回复时才更新卡片或发送消息
+			if (!isFinalResponse) {
+				this.logger?.debug(`[FeishuContext] Non-final stopReason: ${stopReason}, returning early`);
+				return;
+			}
 
-				// 1. 先发送结果卡片（复用 buildCompleteCard，只显示回答部分，不传 timeline）
-				const resultCard = this.cardBuilder.buildCompleteCard(content, {
-					elapsed,
-					onlyAnswer: true,  // 只显示回答部分，不显示思考内容
-				});
-				// 转换卡片内容中的 @用户名
-				if (resultCard?.body?.elements) {
-					for (const element of resultCard.body.elements) {
-						if (element.text?.content) {
-							element.text.content = await this.larkClient.convertAtMentions(this.chatId, element.text.content);
-						}
-						if (element.content) {
-							element.content = await this.larkClient.convertAtMentions(this.chatId, element.content);
+			// 如果使用 CardKit 流式模式，需要完成流式更新
+			if (this.useCardKitStreaming && this.cardKitCardId) {
+				try {
+					await this.finishCardKitStreaming(content, elapsed, timeline);
+					return;
+				} catch (error: any) {
+					this.logger?.error("[CardKit] Failed to finish streaming, falling back to patch mode", undefined, error as Error);
+					// 降级到传统模式继续处理
+					this.useCardKitStreaming = false;
+				}
+			}
+
+			// 检查是否有思考内容（toolCalls 或 reasoning）
+			const hasThinkingContent = this.toolCalls.length > 0 || !!this.thinkingContent;
+
+			// 双卡片设计：如果有思考卡片且有思考内容
+			if (this.cardIds.toolCardId && hasThinkingContent) {
+				try {
+					this.logger?.debug("[finishThinking] Starting dual-card flow", {
+						toolCardId: this.cardIds.toolCardId,
+						toolCallsCount: this.toolCalls.length,
+						hasReasoning: !!this.thinkingContent,
+					});
+
+					// 1. 先发送结果卡片（复用 buildCompleteCard，只显示回答部分，不传 timeline）
+					const resultCard = this.cardBuilder.buildCompleteCard(content, {
+						elapsed,
+						onlyAnswer: true,  // 只显示回答部分，不显示思考内容
+					});
+					// 转换卡片内容中的 @用户名
+					if (resultCard?.body?.elements) {
+						for (const element of resultCard.body.elements) {
+							if (element.text?.content) {
+								element.text.content = await this.larkClient.convertAtMentions(this.chatId, element.text.content);
+							}
+							if (element.content) {
+								element.content = await this.larkClient.convertAtMentions(this.chatId, element.content);
+							}
 						}
 					}
-				}
-				await this.messageSender.sendCard(this.chatId, resultCard, this.quoteMessageId || undefined);
-				this.logger?.debug("[finishThinking] Result card sent");
+					await this.messageSender.sendCard(this.chatId, resultCard, this.quoteMessageId || undefined);
+					this.logger?.debug("[finishThinking] Result card sent");
 
-				// 2. 发送成功后，折叠思考卡片
-				const collapsedCard = this.cardBuilder.buildToolCallsCard(
-					this.toolCalls,
-					timeline,
-					false,  // expanded = false，折叠
-					this.thinkingContent,      // reasoning 内容
-					this.reasoningElapsedMs    // reasoning 耗时
-				);
-				await this.messageSender.updateCard(this.cardIds.toolCardId, collapsedCard);
-				this.logger?.debug("[finishThinking] Thinking card collapsed");
-			} catch (error: any) {
-				// 检查是否是消息不可用错误（消息已撤回/删除）
-				if (isMessageUnavailableError(error)) {
-					this.logger?.debug("Card update skipped - message unavailable");
-					return;
-				}
+					// 2. 发送成功后，折叠思考卡片
+					const collapsedCard = this.cardBuilder.buildToolCallsCard(
+						this.toolCalls,
+						timeline,
+						false,  // expanded = false，折叠
+						this.thinkingContent,      // reasoning 内容
+						this.reasoningElapsedMs    // reasoning 耗时
+					);
+					await this.messageSender.updateCard(this.cardIds.toolCardId, collapsedCard);
+					this.logger?.debug("[finishThinking] Thinking card collapsed");
+				} catch (error: any) {
+					// 检查是否是消息不可用错误（消息已撤回/删除）
+					if (isMessageUnavailableError(error)) {
+						this.logger?.debug("Card update skipped - message unavailable");
+						return;
+					}
 
-				const errorMsg = String(error?.message || error);
-				const isRateLimit = errorMsg.includes("230020") || error?.code === 230020;
-				const errorCode = error?.code ?? error?.response?.data?.code;
+					const errorMsg = String(error?.message || error);
+					const isRateLimit = errorMsg.includes("230020") || error?.code === 230020;
+					const errorCode = error?.code ?? error?.response?.data?.code;
 
-				// 检查是否是权限错误 (code 99991672) - 需要重新抛出以显示授权卡片
-				if (errorCode === 99991672) {
-					this.logger?.warn("Permission error in finishThinking, re-throwing for auth card", { errorMsg });
-					throw error;
-				}
+					// 检查是否是权限错误 (code 99991672) - 需要重新抛出以显示授权卡片
+					if (errorCode === 99991672) {
+						this.logger?.warn("Permission error in finishThinking, re-throwing for auth card", { errorMsg });
+						throw error;
+					}
 
-				if (!isRateLimit) {
-					// 提取更多错误详情
-					const errorDetails = {
-						message: error?.message,
-						code: error?.code,
-						status: error?.response?.status,
-						data: error?.response?.data,
-					};
-					this.logger?.error("Failed to send dual cards, falling back to text", errorDetails, error as Error);
+					if (!isRateLimit) {
+						// 提取更多错误详情
+						const errorDetails = {
+							message: error?.message,
+							code: error?.code,
+							status: error?.response?.status,
+							data: error?.response?.data,
+						};
+						this.logger?.error("Failed to send dual cards, falling back to text", errorDetails, error as Error);
+					}
+					// 降级发送文本（仅在不是频率限制时）
+					if (!isRateLimit && content) {
+						await this.messageSender.sendText(this.chatId, content, this.quoteMessageId || undefined);
+					}
 				}
-				// 降级发送文本（仅在不是频率限制时）
-				if (!isRateLimit && content) {
-					await this.messageSender.sendText(this.chatId, content, this.quoteMessageId || undefined);
-				}
+			} else if (content) {
+				// 没有思考卡片或没有思考内容时，直接发送结果
+				await this.messageSender.sendText(this.chatId, content, this.quoteMessageId || undefined);
 			}
-		} else if (content) {
-			// 没有思考卡片或没有思考内容时，直接发送结果
-			await this.messageSender.sendText(this.chatId, content, this.quoteMessageId || undefined);
-		}
 
-		// 只有在最终回复时才清理状态
-		if (isFinalResponse) {
-			this.currentCardStatus = "complete";
-			this.thinkingStartTime = null;
-			this.toolCalls = [];
-			this.timeline = []; // 清空时间线
-			this.currentTurn = 0; // 重置 turn 轮次
-			this._responseSentTurn = 0; // 同时重置响应标记，允许后续工具调用更新
-			this.thinkingContent = "";
-			this.pendingContent = "";
+			// 只有在最终回复时才清理状态
+			if (isFinalResponse) {
+				this.currentCardStatus = "complete";
+				this.thinkingStartTime = null;
+				this.toolCalls = [];
+				this.timeline = []; // 清空时间线
+				this.currentTurn = 0; // 重置 turn 轮次
+				this._responseSentTurn = 0; // 同时重置响应标记，允许后续工具调用更新
+				this.thinkingContent = "";
+				this.pendingContent = "";
 
-			// 重置 reasoning 耗时追踪
-			this.reasoningStartTime = null;
-			this.reasoningElapsedMs = 0;
+				// 重置 reasoning 耗时追踪
+				this.reasoningStartTime = null;
+				this.reasoningElapsedMs = 0;
 
-			// 重置卡片 ID
-			this.logger?.debug("[cardIds] Resetting cardIds", {
-				location: "finishThinking",
-				previousToolCardId: this.cardIds.toolCardId,
-			});
-			this.cardIds = {
-				statusCardId: null,
-				thinkingCardId: null,
-				toolCardId: null,
-			};
+				// 重置卡片 ID
+				this.logger?.debug("[cardIds] Resetting cardIds", {
+					location: "finishThinking",
+					previousToolCardId: this.cardIds.toolCardId,
+				});
+				this.cardIds = {
+					statusCardId: null,
+					thinkingCardId: null,
+					toolCardId: null,
+				};
 
-			// 重置 CardKit 流式状态
-			this.useCardKitStreaming = false;
-			this.cardKitCardId = null;
-			this.cardKitMessageId = null;
-			this.cardKitLastContent = "";
-			this.cardKitClient.resetStreaming();
+				// 重置 CardKit 流式状态
+				this.useCardKitStreaming = false;
+				this.cardKitCardId = null;
+				this.cardKitMessageId = null;
+				this.cardKitLastContent = "";
+				this.cardKitClient.resetStreaming();
+			}
+		} finally {
+			// 【修复】释放同步锁
+			if (isFinalResponse) {
+				this._responseSendingLock = false;
+			}
 		}
 	}
 
