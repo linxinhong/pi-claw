@@ -747,9 +747,16 @@ export class FeishuPlatformContext implements PlatformContext {
 			this.reasoningStartTime = Date.now();
 		}
 
-		// 检查内容是否有实质性变化（至少新增10个字符或完全不同的内容）
-		const contentChanged = content.length > this.thinkingContent.length + 10 ||
+		// 检查内容是否有实质性变化（至少新增5个字符或完全不同的内容）
+		const oldLength = this.thinkingContent.length;
+		const contentChanged = content.length > oldLength + 5 ||
 		                       !content.startsWith(this.thinkingContent);
+
+		this.logger?.debug("[updateThinking] contentChanged check", {
+			newLength: content.length,
+			oldLength,
+			contentChanged,
+		});
 
 		// 更新思考内容
 		this.thinkingContent = content;

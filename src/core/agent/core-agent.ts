@@ -573,14 +573,18 @@ export class CoreAgent {
 								await (platformContext as any).finishThinking(finalResponse, isFinalResponse ? "stop" : stopReason);
 							}
 
-							// 立即取消订阅，防止后续事件（如新 turn 的工具调用）被处理
-							if (state.unsubscribe) {
-								log.logInfo(`[Agent] Unsubscribing from session events after message_end`);
-								state.unsubscribe();
-								state.unsubscribe = null;
+							// 只有最终回复时才取消订阅和 resolve promise
+							// toolUse 等中间状态需要继续等待下一个 turn
+							if (isFinalResponse) {
+								if (state.unsubscribe) {
+									log.logInfo(`[Agent] Unsubscribing from session events after final message_end`);
+									state.unsubscribe();
+									state.unsubscribe = null;
+								}
+								resolve(finalResponse);
+							} else {
+								log.logInfo(`[Agent] Intermediate stopReason: ${stopReason}, continuing to wait for next turn...`);
 							}
-
-							resolve(finalResponse);
 						}
 					} catch (error) {
 						// 检查是否是权限错误，如果是则 reject Promise 让上层处理
