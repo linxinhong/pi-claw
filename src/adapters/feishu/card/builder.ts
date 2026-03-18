@@ -651,9 +651,14 @@ export class CardBuilder {
 
 	/**
 	 * 转换为飞书兼容的 Markdown
+	 * 
+	 * 【修复】限制表格数量，飞书卡片最多支持 3 个表格
 	 */
 	private convertToFeishuMarkdown(content: string): string {
 		let result = content;
+
+		// 【修复】限制 Markdown 表格数量（飞书最多支持 3 个表格）
+		result = this.limitMarkdownTables(result, 3);
 
 		// 转换代码块
 		result = result.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
@@ -672,6 +677,29 @@ export class CardBuilder {
 		result = result.replace(/@([a-zA-Z0-9_\u4e00-\u9fa5]+)/g, "\\@$1");
 
 		return result;
+	}
+
+	/**
+	 * 限制 Markdown 表格数量
+	 * @param content 原始内容
+	 * @param maxTables 最大表格数量
+	 * @returns 处理后的内容
+	 */
+	private limitMarkdownTables(content: string, maxTables: number): string {
+		// 匹配 Markdown 表格：| header | header |
+		//                     |--------|--------|
+		//                     | cell   | cell   |
+		const tableRegex = /(\|[^\n]+\|\n\|[-:|\s]+\|\n(?:\|[^\n]+\|\n?)+)/g;
+		
+		let tableCount = 0;
+		return content.replace(tableRegex, (match) => {
+			tableCount++;
+			if (tableCount > maxTables) {
+				// 超过限制的表格转换为代码块格式
+				return `\n\`\`\`\n${match.trim()}\n\`\`\`\n`;
+			}
+			return match;
+		});
 	}
 
 	/**
