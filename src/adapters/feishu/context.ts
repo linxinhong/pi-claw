@@ -840,11 +840,7 @@ export class FeishuPlatformContext implements PlatformContext {
 
 		// 只有最终回复时才更新卡片或发送消息
 		if (!isFinalResponse) {
-			// 非最终回复（如 toolUse），重置响应标记，允许后续更新
-			this._responseSentTurn = 0;
-			this.logger?.debug(`[FeishuContext] Non-final stopReason: ${stopReason}, resetting response flag`, {
-				currentTurn: this.currentTurn,
-			});
+			this.logger?.debug(`[FeishuContext] Non-final stopReason: ${stopReason}, returning early`);
 			return;
 		}
 
@@ -871,19 +867,6 @@ export class FeishuPlatformContext implements PlatformContext {
 					toolCallsCount: this.toolCalls.length,
 					hasReasoning: !!this.thinkingContent,
 				});
-
-				// 0. 在发送结果卡片之前，先执行任何 pending 的工具卡片更新
-				// 这确保工具调用完成的状态被记录到思考卡片中
-				if (this.toolCardUpdateTimer) {
-					clearTimeout(this.toolCardUpdateTimer);
-					this.toolCardUpdateTimer = undefined;
-					// 临时重置 _responseSentTurn，允许更新
-					const savedResponseSentTurn = this._responseSentTurn;
-					this._responseSentTurn = 0;
-					await this.doUpdateOrCreateToolCard();
-					this._responseSentTurn = savedResponseSentTurn;
-					this.logger?.debug("[finishThinking] Forced tool card update before sending result");
-				}
 
 				// 1. 先发送结果卡片（复用 buildCompleteCard，只显示回答部分，不传 timeline）
 				const resultCard = this.cardBuilder.buildCompleteCard(content, {
@@ -1128,12 +1111,8 @@ export class FeishuPlatformContext implements PlatformContext {
 		// 但如果有现有卡片（即使没有工具调用），也应该更新（可能只有思考内容）
 		if (this.toolCalls.length === 0 && !this.cardIds.toolCardId) return;
 
-		// 如果响应已发送，不再更新/创建工具卡片
-		// 注意：_responseSentTurn = 0 表示未发送状态，只有 > 0 才表示已发送
-		if (this._responseSentTurn > 0 && this._responseSentTurn >= this.currentTurn) {
-			this.logger?.debug("[doUpdateOrCreateToolCard] Response already sent for this turn, skipping");
-			return;
-		}
+		// 工具卡片更新独立于结果卡片发送时序
+		// 结果卡片发送的防重入保护在 finishThinking 开头已经处理
 
 		try {
 			// 获取时间线并传入工具卡片
@@ -1232,7 +1211,7 @@ export class FeishuPlatformContext implements PlatformContext {
 	 */
 	startNewTurn(): void {
 		this.currentTurn++;
-		// 不在这里重置 _responseSentTurn，而是在 finishThinking(toolUse) 中重置
+		// _responseSentTurn 用于防止 finishThinking(stop) 并发调用，不需要在 turn 切换时重置
 		this.logger?.debug("[startNewTurn] Turn counter incremented", {
 			currentTurn: this.currentTurn,
 		});
