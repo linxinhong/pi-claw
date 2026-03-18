@@ -872,6 +872,19 @@ export class FeishuPlatformContext implements PlatformContext {
 					hasReasoning: !!this.thinkingContent,
 				});
 
+				// 0. 在发送结果卡片之前，先执行任何 pending 的工具卡片更新
+				// 这确保工具调用完成的状态被记录到思考卡片中
+				if (this.toolCardUpdateTimer) {
+					clearTimeout(this.toolCardUpdateTimer);
+					this.toolCardUpdateTimer = undefined;
+					// 临时重置 _responseSentTurn，允许更新
+					const savedResponseSentTurn = this._responseSentTurn;
+					this._responseSentTurn = 0;
+					await this.doUpdateOrCreateToolCard();
+					this._responseSentTurn = savedResponseSentTurn;
+					this.logger?.debug("[finishThinking] Forced tool card update before sending result");
+				}
+
 				// 1. 先发送结果卡片（复用 buildCompleteCard，只显示回答部分，不传 timeline）
 				const resultCard = this.cardBuilder.buildCompleteCard(content, {
 					elapsed,
