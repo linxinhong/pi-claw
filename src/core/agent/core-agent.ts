@@ -539,15 +539,21 @@ export class CoreAgent {
 
 							// 如果是最终 turn 且没有 message_end 事件，手动调用 finishThinking
 							const isFinalTurn = stopReason === "stop" || stopReason === "end_turn" || stopReason === "error";
-							// 【修复】防止 finishThinking 被重复调用
+							// 【修复】延迟执行 turn_end 的 finishThinking，给 message_end 优先权
 							if (isFinalTurn && !finishThinkingCalled && (platformContext as any).finishThinking) {
-								finishThinkingCalled = true;
-								// 从 platformContext 获取缓存的内容
-								const lastContent = (platformContext as any).getLastStreamingContent?.() || "";
-								if (lastContent) {
-									log.logInfo(`[Agent] turn_end with final stopReason, calling finishThinking`);
-									await (platformContext as any).finishThinking(lastContent, stopReason);
-								}
+								// 延迟 100ms，让 message_end 有机会先执行
+								setTimeout(async () => {
+									// 再次检查，如果 message_end 已经调用了，就不再执行
+									if (!finishThinkingCalled) {
+										finishThinkingCalled = true;
+										// 从 platformContext 获取缓存的内容
+										const lastContent = (platformContext as any).getLastStreamingContent?.() || "";
+										if (lastContent) {
+											log.logInfo(`[Agent] turn_end with final stopReason, calling finishThinking (fallback)`);
+											await (platformContext as any).finishThinking(lastContent, stopReason);
+										}
+									}
+								}, 100);
 							}
 						} else if (agentEvent.type === "message_end" && agentEvent.message.role === "assistant") {
 							const assistantMsg = agentEvent.message as any;
