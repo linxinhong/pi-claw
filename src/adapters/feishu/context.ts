@@ -1217,7 +1217,11 @@ export class FeishuPlatformContext implements PlatformContext {
 	 */
 	startNewTurn(): void {
 		this.currentTurn++;
-		// 不再需要重置 _responseSent，改用 turn 编号比较
+		// 重置响应发送标记，允许新 turn 发送响应
+		this._responseSentTurn = 0;
+		this.logger?.debug("[startNewTurn] Reset response sent flag", {
+			currentTurn: this.currentTurn,
+		});
 	}
 
 	/**
