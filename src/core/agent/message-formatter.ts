@@ -43,6 +43,53 @@ export interface MarkdownOptions {
 }
 
 /**
+ * 安全截断消息，确保不会留下孤立的 toolResult 消息
+ * 规则：如果最后一条消息是 toolResult，则必须保留对应的 assistant 消息
+ */
+export function safeTruncateMessages<T extends { role: string; toolCallId?: string }>(
+	messages: T[],
+	maxMessages: number,
+): T[] {
+	if (messages.length <= maxMessages) return messages;
+
+	// 计算需要保留的消息数
+	let keepCount = maxMessages;
+
+	// 获取最后一条消息的角色
+	const lastMsg = messages[messages.length - 1];
+	const secondLastMsg = messages[messages.length - 2];
+
+	// 如果最后一条是 toolResult，前一条必须是 assistant（带 tool_calls）
+	// 如果截断后只剩 toolResult 而没有 assistant，需要多保留一条
+	if (lastMsg?.role === "toolResult" && keepCount > 0) {
+		const keptMessages = messages.slice(-keepCount);
+		const hasAssistantWithToolCalls = keptMessages.some(
+			(m) => m.role === "assistant" && (m as any).toolCalls?.length > 0,
+		);
+		if (!hasAssistantWithToolCalls && messages.length > keepCount) {
+			keepCount++;
+		}
+	}
+
+	// 再次检查截断后的最后一条消息
+	// 如果截断后最后一条是 toolResult 且前一条不是 assistant，需要继续调整
+	const truncated = messages.slice(-keepCount);
+	const lastTruncated = truncated[truncated.length - 1];
+	const secondLastTruncated = truncated[truncated.length - 2];
+
+	if (
+		lastTruncated?.role === "toolResult" &&
+		secondLastTruncated?.role !== "assistant" &&
+		keepCount < messages.length
+	) {
+		// 移除这个孤立的 toolResult
+		return truncated.slice(0, -1);
+	}
+
+	return truncated;
+}
+
+/**
  * 将历史消息转换为 Markdown 格式
  *
  * 策略：
@@ -70,9 +117,9 @@ export function convertToMarkdown(
 		return filtered;
 	}
 
-	// 3. 分割历史消息和最近消息
-	const historyMessages = filtered.slice(0, -opts.keepRecentMessages);
-	const recentMessages = filtered.slice(-opts.keepRecentMessages);
+	// 3. 安全截断：分割历史消息和最近消息
+	const recentMessages = safeTruncateMessages(filtered, opts.keepRecentMessages);
+	const historyMessages = filtered.slice(0, filtered.length - recentMessages.length);
 
 	// 4. 转换历史消息为 Markdown
 	const lines: string[] = ["## 近期对话", ""];

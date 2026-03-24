@@ -963,7 +963,8 @@ export class FeishuPlatformContext implements PlatformContext {
 				this.toolCalls = [];
 				this.timeline = []; // 清空时间线
 				this.currentTurn = 0; // 重置 turn 轮次
-				this._responseSentTurn = 0; // 同时重置响应标记，允许后续工具调用更新
+				// 【修复】不重置 _responseSentTurn，让 isResponseSent() 在新消息到来前保持 true
+				// 防止 unified-bot.ts 重复发送文本消息
 				this.thinkingContent = "";
 				this.pendingContent = "";
 
@@ -1323,11 +1324,8 @@ export class FeishuPlatformContext implements PlatformContext {
 	 */
 	addThinkingToTimeline(content: string): void {
 		// addThinkingToTimeline 调试日志已禁用
-		// 【修复】增加思考内容显示长度（从 50 增加到 200 字符）
-		const MAX_THINKING_LENGTH = 200;
-		const truncated = content.length > MAX_THINKING_LENGTH 
-			? content.slice(0, MAX_THINKING_LENGTH) + "..." 
-			: content;
+		// 【修复】移除思考内容长度限制，避免截断用户的思考过程
+		const displayContent = content;
 
 		const currentTurn = this.currentTurn || 1;
 		
@@ -1338,13 +1336,13 @@ export class FeishuPlatformContext implements PlatformContext {
 		
 		if (existingIndex >= 0) {
 			// 更新现有条目
-			this.timeline[existingIndex].content = truncated;
+			this.timeline[existingIndex].content = displayContent;
 		} else {
 			// 添加新条目
 			this.timeline.push({
 				type: "thinking",
 				turn: currentTurn,
-				content: truncated,
+				content: displayContent,
 			});
 		}
 		// Timeline after add 调试日志已禁用
@@ -1553,8 +1551,14 @@ export class FeishuPlatformContext implements PlatformContext {
 
 	/**
 	 * 完成响应（更新状态卡片为最终状态）
+	 * 【修复】如果响应已通过 finishThinking 发送，则不再执行
 	 */
 	async finalizeResponse(content: string): Promise<void> {
+		// 如果响应已经发送，跳过
+		if (this.isResponseSent()) {
+			this.logger?.debug("[finalizeResponse] Response already sent via finishThinking, skipping");
+			return;
+		}
 		await this.finishStatus(content);
 	}
 

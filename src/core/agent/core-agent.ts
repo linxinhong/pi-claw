@@ -21,7 +21,7 @@ import { join } from "path";
 import { getChannelDir } from "../../utils/config.js";
 import type { AgentContext } from "./context.js";
 import { buildSystemPrompt, generateHistoryMarkdown, loadBootFiles, loadMemoryContent, loadSkills } from "./prompt-builder.js";
-import { convertToMarkdown } from "./message-formatter.js";
+import { convertToMarkdown, safeTruncateMessages } from "./message-formatter.js";
 import type { ModelManager } from "../model/manager.js";
 import type { PlatformContext } from "../platform/context.js";
 import type { UniversalMessage } from "../platform/message.js";
@@ -546,12 +546,13 @@ export class CoreAgent {
 								setTimeout(async () => {
 									// 再次检查，如果 message_end 已经调用了，就不再执行
 									if (!finishThinkingCalled) {
-										finishThinkingCalled = true;
 										// 从 platformContext 获取缓存的内容
 										const lastContent = (platformContext as any).getLastStreamingContent?.() || "";
 										if (lastContent) {
 											log.logInfo(`[Agent] turn_end with final stopReason, calling finishThinking (fallback)`);
 											await (platformContext as any).finishThinking(lastContent, stopReason);
+											// 【修复】成功执行后才设置标志
+											finishThinkingCalled = true;
 										}
 									}
 								}, 100);
@@ -581,11 +582,14 @@ export class CoreAgent {
 							// 完成思考卡片（传递 stopReason 以区分中间 turn 和最终 turn）
 							// 注意：error 也视为最终回复，需要显示给用户
 							const isFinalResponse = stopReason === "stop" || stopReason === "end_turn" || stopReason === "error";
-							// 【修复】防止 finishThinking 被重复调用
+							// 【修复】防止 finishThinking 被重复调用，但允许非最终响应（toolUse）后继续处理
 							if (!finishThinkingCalled && (platformContext as any).finishThinking) {
-								finishThinkingCalled = true;
 								log.logInfo(`[Agent] Calling finishThinking with content: "${finalResponse.slice(0, 50)}...", stopReason: ${stopReason}`);
 								await (platformContext as any).finishThinking(finalResponse, isFinalResponse ? "stop" : stopReason);
+								// 【修复】只在最终响应后才设置标志，非最终响应（toolUse）不设置，以便后续还能调用
+								if (isFinalResponse) {
+									finishThinkingCalled = true;
+								}
 							}
 
 							// 只有最终回复时才取消订阅和 resolve promise
@@ -899,12 +903,8 @@ export class CoreAgent {
 				includeToolResults: false,
 			});
 
-			// 最终截断到 maxMessages 条
-			if (converted.length > maxMessages) {
-				log.logInfo(`[Agent] Truncating messages from ${converted.length} to ${maxMessages}`);
-				return converted.slice(-maxMessages);
-			}
-			return converted;
+			// 最终截断到 maxMessages 条（使用安全截断，避免孤立 toolResult）
+			return safeTruncateMessages(converted, maxMessages);
 		};
 
 		// 创建 Agent

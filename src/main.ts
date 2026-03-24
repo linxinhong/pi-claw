@@ -204,8 +204,8 @@ export async function main(options: MainOptions = {}): Promise<void> {
 	// 6. 启动 HTTP 服务器（如果有 createServer 的 adapter）
 	let server: ReturnType<typeof app.listen> | undefined;
 	if (hasServerAdapter && port) {
-		server = app.listen(port, () => {
-			log.logInfo(`HTTP server running on port ${port}`);
+		server = app.listen(port, '127.0.0.1', () => {
+			log.logInfo(`HTTP server running on 127.0.0.1:${port}`);
 		});
 	}
 

@@ -5,7 +5,7 @@
  */
 
 import type { CardStatus, ToolCallInfo, TimelineEvent } from "../types.js";
-import { splitReasoningText, formatReasoningDuration } from "./reasoning-parser.js";
+import { splitReasoningText } from "./reasoning-parser.js";
 
 // ============================================================================
 // Types
@@ -131,16 +131,12 @@ export class CardBuilder {
 		// 【修改】只用 timeline 展示，不单独显示 reasoningContent
 		// 思考内容通过 timeline 中的 thinking 事件来展示
 		if (hasTimeline) {
-			const durationLabel = reasoningElapsedMs
-				? formatReasoningDuration(reasoningElapsedMs)
-				: "Thought";
-
 			console.log("[CARD_TYPE] buildToolCallsCard: 使用时间线折叠面板（按时间顺序展示）");
 			elements.push({
 				tag: "collapsible_panel",
 				expanded: expanded,
 				header: {
-					title: { tag: "plain_text", content: `思考过程 (${durationLabel})` },
+					title: { tag: "plain_text", content: "思考过程" },
 					vertical_align: "center",
 					icon: {
 						tag: "standard_icon",
@@ -344,14 +340,11 @@ export class CardBuilder {
 
 		// 1. 思考内容折叠面板（如果有）
 		if (reasoningText) {
-			const durationLabel = options?.reasoningElapsedMs
-				? formatReasoningDuration(options.reasoningElapsedMs)
-				: "Thought";
 			elements.push({
 				tag: "collapsible_panel",
 				expanded: false,
 				header: {
-					title: { tag: "plain_text", content: `💭 ${durationLabel}` },
+					title: { tag: "plain_text", content: "💭 思考过程" },
 				},
 				elements: [{ tag: "markdown", content: reasoningText, text_size: "notation" }],
 			} as CardElement);
