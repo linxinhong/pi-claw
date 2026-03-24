@@ -218,7 +218,6 @@ Provide a clear, concise summary of your findings. Focus on the most relevant in
 			getAgentsFiles: () => ({ agentsFiles: [] }),
 			getSystemPrompt: () => currentPrompt,
 			getAppendSystemPrompt: () => [],
-			getPathMetadata: () => new Map(),
 			extendResources: () => {},
 			reload: async () => {},
 		};

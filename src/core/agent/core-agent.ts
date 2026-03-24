@@ -1203,7 +1203,6 @@ export class CoreAgent {
 				getAgentsFiles: () => ({ agentsFiles: [] }),
 				getSystemPrompt: () => currentSystemPrompt,
 				getAppendSystemPrompt: () => [],
-				getPathMetadata: () => new Map(),
 				extendResources: () => {},
 				reload: async () => {},
 			},

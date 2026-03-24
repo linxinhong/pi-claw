@@ -1,54 +1,54 @@
 {
- "name": "@linxinhong/pi-claw",
- "version": "1.0.0",
- "description": "Multi-platform bot gateway with plugin architecture",
- "type": "module",
- "main": "dist/main.js",
- "types": "dist/main.d.ts",
- "bin": {
-  "pi-claw": "./dist/cli.js"
- },
- "files": [
-  "dist"
- ],
- "scripts": {
-  "build": "rm -rf dist && tsc && cp -r templates dist/ && cp -r docs dist/ && cp pnpm-lock.yaml dist/ && cp -r scripts dist/ && mkdir -p dist/adapters/slidev/server && cp -r src/adapters/slidev/server/static dist/adapters/slidev/server/ && sed 's|dist/main.js|main.js|g; s|dist/main.d.ts|main.d.ts|g; s|./dist/cli.js|./cli.js|g' package.json > dist/package.json && chmod +x dist/cli.js",
-  "start": "node dist/main.js",
-  "dev": "tsx watch src/main.ts",
-  "dev:tui": "tsx src/cli.ts tui",
-  "typecheck": "tsc --noEmit",
-  "init": "tsx scripts/init-workspace.ts",
-  "lock": "bash scripts/lock-config.sh lock",
-  "unlock": "bash scripts/lock-config.sh unlock",
-  "config:status": "bash scripts/lock-config.sh status",
-  "test": "vitest",
-  "test:run": "vitest run",
-  "test:coverage": "vitest run --coverage",
-  "test:unit": "vitest run tests/unit",
-  "test:watch": "vitest watch"
- },
- "dependencies": {
-  "@larksuiteoapi/feishu-openclaw-plugin": "^2026.3.8",
-  "@larksuiteoapi/node-sdk": "^1.29.0",
-  "@mariozechner/pi-agent-core": "^0.57.1",
-  "@mariozechner/pi-ai": "^0.57.1",
-  "@mariozechner/pi-coding-agent": "^0.57.1",
-  "@mariozechner/pi-tui": "^0.57.1",
-  "@sinclair/typebox": "^0.34.48",
-  "commander": "^12.0.0",
-  "croner": "^8.0.0",
-  "express": "^4.18.2",
-  "openai": "^6.27.0"
- },
- "devDependencies": {
-  "@types/express": "^4.17.21",
-  "@types/node": "^20.0.0",
-  "@vitest/coverage-v8": "^2.0.0",
-  "tsx": "^4.0.0",
-  "typescript": "^5.0.0",
-  "vitest": "^2.0.0"
- },
- "engines": {
-  "node": ">=18.0.0"
- }
+  "name": "@linxinhong/pi-claw",
+  "version": "1.0.0",
+  "description": "Multi-platform bot gateway with plugin architecture",
+  "type": "module",
+  "main": "dist/main.js",
+  "types": "dist/main.d.ts",
+  "bin": {
+    "pi-claw": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && tsc && cp -r templates dist/ && cp -r docs dist/ && cp pnpm-lock.yaml dist/ && cp -r scripts dist/ && mkdir -p dist/adapters/slidev/server && cp -r src/adapters/slidev/server/static dist/adapters/slidev/server/ && sed 's|dist/main.js|main.js|g; s|dist/main.d.ts|main.d.ts|g; s|./dist/cli.js|./cli.js|g' package.json > dist/package.json && chmod +x dist/cli.js",
+    "start": "node dist/main.js",
+    "dev": "tsx watch src/main.ts",
+    "dev:tui": "tsx src/cli.ts tui",
+    "typecheck": "tsc --noEmit",
+    "init": "tsx scripts/init-workspace.ts",
+    "lock": "bash scripts/lock-config.sh lock",
+    "unlock": "bash scripts/lock-config.sh unlock",
+    "config:status": "bash scripts/lock-config.sh status",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:unit": "vitest run tests/unit",
+    "test:watch": "vitest watch"
+  },
+  "dependencies": {
+    "@larksuiteoapi/feishu-openclaw-plugin": "^2026.3.8",
+    "@larksuiteoapi/node-sdk": "^1.29.0",
+    "@mariozechner/pi-agent-core": "^0.62.0",
+    "@mariozechner/pi-ai": "^0.62.0",
+    "@mariozechner/pi-coding-agent": "0.62.0",
+    "@mariozechner/pi-tui": "^0.57.1",
+    "@sinclair/typebox": "^0.34.48",
+    "commander": "^12.0.0",
+    "croner": "^8.0.0",
+    "express": "^4.18.2",
+    "openai": "^6.27.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^2.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
 }
