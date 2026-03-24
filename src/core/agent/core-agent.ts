@@ -991,6 +991,31 @@ export class CoreAgent {
 				log.logWarning(`[Agent] Filtered out ${messages.length - validMessages.length} invalid messages`);
 			}
 
+			// 【修复】处理孤立的 tool_calls（当消息被截断时，tool_calls 可能没有对应的 tool_result）
+			if (pendingToolCalls.size > 0) {
+				log.logWarning(`[Agent] Found ${pendingToolCalls.size} orphaned tool_calls, removing from last assistant message`);
+				// 从后往前找到最后一个 assistant 消息
+				for (let i = validMessages.length - 1; i >= 0; i--) {
+					const msg = validMessages[i];
+					if ((msg as any).role === "assistant") {
+						const assistantMsg = msg as any;
+						// 过滤掉没有对应 tool_result 的 tool_calls
+						if (assistantMsg.content && Array.isArray(assistantMsg.content)) {
+							assistantMsg.content = assistantMsg.content.filter(
+								(c: any) => c.type !== "toolCall" || !pendingToolCalls.has(c.id)
+							);
+						}
+						// 同时清理 toolCalls 属性
+						if (assistantMsg.toolCalls && Array.isArray(assistantMsg.toolCalls)) {
+							assistantMsg.toolCalls = assistantMsg.toolCalls.filter(
+								(tc: any) => !pendingToolCalls.has(tc.id)
+							);
+						}
+						break;
+					}
+				}
+			}
+
 			// 计算预估总长度
 			const systemPromptLength = systemPrompt.length;
 			const messagesLength = validMessages.reduce((sum, msg) =>
