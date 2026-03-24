@@ -12,6 +12,7 @@ import type { MessageSender } from "./messaging/outbound/sender.js";
 import type { PiLogger } from "../../utils/logger/index.js";
 import type { ToolCallInfo, MultiCardIds, TimelineEvent } from "./types.js";
 import { CardBuilder, STREAMING_ELEMENT_ID } from "./card/builder.js";
+import { extractThinkingContent } from "./card/reasoning-parser.js";
 import { CardKitClient } from "./card/cardkit.js";
 import { extractPermissionError, shouldNotifyPermissionError, sendAuthCard } from "./utils/permission-error.js";
 import { isMessageUnavailable, isMessageUnavailableError } from "./utils/message-unavailable.js";
@@ -1324,8 +1325,9 @@ export class FeishuPlatformContext implements PlatformContext {
 	 */
 	addThinkingToTimeline(content: string): void {
 		// addThinkingToTimeline 调试日志已禁用
-		// 【修复】移除思考内容长度限制，避免截断用户的思考过程
-		const displayContent = content;
+		// 提取 think 标签内的实际内容，避免将标签本身显示在时间线中
+		const thinkingContent = extractThinkingContent(content);
+		const displayContent = thinkingContent || content;
 
 		const currentTurn = this.currentTurn || 1;
 		
