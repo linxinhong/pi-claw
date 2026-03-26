@@ -917,20 +917,33 @@ export class CoreAgent {
 			},
 			convertToLlm: convertToLlmWithTruncation,
 			getApiKey: async () => getApiKeyForModel(model, state.modelRegistry!),
-			// 【修复】Minimax 等模型的 tool call ID 不匹配问题
-			// 问题原因：transformMessages 会规范化 assistant 消息中的 tool call ID，
-			// 但 convertMessages 中 tool result 消息使用原始 ID，导致不匹配
+			// 【调试+修复】Minimax 等模型的 tool call ID 不匹配问题
 			onPayload: (payload: unknown, _model: typeof model) => {
 				const params = payload as {
 					messages?: Array<{
 						role?: string;
 						tool_call_id?: string;
 						tool_calls?: Array<{ id?: string }>;
+						content?: unknown;
 					}>;
 				};
 				if (!params?.messages || !Array.isArray(params.messages)) {
 					return payload;
 				}
+
+				// 【详细日志】记录消息概况
+				const msgSummary = params.messages.map((m, i) => {
+					if (m.role === "assistant") {
+						const tcCount = m.tool_calls?.length || 0;
+						const ids = m.tool_calls?.map(tc => tc.id).filter(Boolean) || [];
+						return `[${i}]assistant(tc=${tcCount},ids=[${ids.join(",")}])`;
+					}
+					if (m.role === "tool") {
+						return `[${i}]tool(id=${m.tool_call_id})`;
+					}
+					return `[${i}]${m.role}`;
+				});
+				log.logInfo(`[Agent][onPayload] Messages: ${msgSummary.join(" ")}`);
 
 				// 收集所有 assistant 消息中的 tool call ID
 				const assistantToolCallIds = new Set<string>();
@@ -944,15 +957,24 @@ export class CoreAgent {
 					}
 				}
 
+				// 【详细日志】记录收集到的 tool call ID
+				log.logInfo(`[Agent][onPayload] Assistant tool_call ids: [${Array.from(assistantToolCallIds).join(",")}]`);
+
 				// 检查并修复 tool 消息中的 tool_call_id
 				let hasFix = false;
+				const toolIds: string[] = [];
+				const missingIds: string[] = [];
+
 				for (const msg of params.messages) {
 					if (msg.role === "tool" && msg.tool_call_id) {
+						toolIds.push(msg.tool_call_id);
 						// 如果 tool_call_id 不在 assistant 的 tool_calls 中，尝试修复
 						if (!assistantToolCallIds.has(msg.tool_call_id)) {
-							// 尝试查找匹配的 tool call ID（去掉可能的下划线后缀）
+							missingIds.push(msg.tool_call_id);
 							const originalId = msg.tool_call_id;
-							// 尝试不同的规范化形式
+							log.logWarning(`[Agent][onPayload] Mismatch: tool_call_id=${originalId} not in assistant tool_calls`);
+
+							// 尝试查找匹配的 tool call ID
 							const possibleIds = [
 								originalId,
 								originalId.replace(/_/g, "-"),
@@ -963,7 +985,7 @@ export class CoreAgent {
 
 							for (const id of possibleIds) {
 								if (id && assistantToolCallIds.has(id)) {
-									log.logInfo(`[Agent] Fixing tool_call_id: ${originalId} -> ${id}`);
+									log.logInfo(`[Agent][onPayload] Fixed: ${originalId} -> ${id}`);
 									msg.tool_call_id = id;
 									hasFix = true;
 									break;
@@ -973,8 +995,12 @@ export class CoreAgent {
 					}
 				}
 
+				log.logInfo(`[Agent][onPayload] Tool ids: [${toolIds.join(",")}]`);
+				if (missingIds.length > 0) {
+					log.logWarning(`[Agent][onPayload] Missing tool_call_ids: [${missingIds.join(",")}]`);
+				}
 				if (hasFix) {
-					log.logInfo("[Agent] Fixed tool call ID mismatch in payload");
+					log.logInfo("[Agent][onPayload] Fixed tool call ID mismatch");
 				}
 
 				return payload;
