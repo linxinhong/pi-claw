@@ -43,7 +43,7 @@ export async function convertFileMessage(
 			console.error(`[FileConverter] Download returned null: ${fileName}`);
 			// 返回特殊标记，提示需要文件权限
 			return { 
-				content: `[文件: ${fileName}]\n\n⚠️ **无法下载文件**：应用缺少文件读取权限（im:file:readonly）。\n\n请前往飞书开发者后台开通权限：\n1. 打开 https://open.feishu.cn/app/cli_a93bdf008f389bcb\n2. 进入「权限管理」\n3. 添加「im:file:readonly」权限\n4. 重新授权应用`,
+				content: `[文件: ${fileName}]\n\n⚠️ **无法下载文件**：应用缺少文件读取权限（im:resource）。\n\n请前往飞书开发者后台开通权限：\n1. 打开 https://open.feishu.cn/app/cli_a93bdf008f389bcb\n2. 进入「权限管理」\n3. 添加「im:resource」权限\n4. 重新授权应用`,
 			};
 		}
 
