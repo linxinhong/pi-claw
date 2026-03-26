@@ -37,6 +37,7 @@ export async function convertFileMessage(
 			channelId: context.chatId,
 			timestamp,
 			fileName,
+			messageId: context.messageId,  // 传递 message_id 使用 messageResource API
 		});
 
 		if (!localPath) {
