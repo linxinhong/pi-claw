@@ -100,66 +100,9 @@ export function safeTruncateMessages<T extends { role: string; toolCallId?: stri
  */
 export function convertToMarkdown(
 	messages: Parameters<typeof convertToLlm>[0],
-	options: Partial<MarkdownOptions> = {},
+	_options: Partial<MarkdownOptions> = {},
 ): ReturnType<typeof convertToLlm> {
-	const opts: MarkdownOptions = {
-		keepRecentMessages: 10, // 保留 5 轮对话
-		maxMarkdownLength: 10000,
-		includeToolResults: false,
-		...options,
-	};
-
-	// 1. 先使用原始 convertToLlm 过滤
-	const filtered = convertToLlm(messages);
-
-	// 2. 如果消息数量少，直接返回
-	if (filtered.length <= opts.keepRecentMessages) {
-		return filtered;
-	}
-
-	// 3. 安全截断：分割历史消息和最近消息
-	const recentMessages = safeTruncateMessages(filtered, opts.keepRecentMessages);
-	const historyMessages = filtered.slice(0, filtered.length - recentMessages.length);
-
-	// 4. 转换历史消息为 Markdown
-	const lines: string[] = ["## 近期对话", ""];
-
-	for (const msg of historyMessages) {
-		const timestamp = formatTimestamp((msg as any).timestamp || Date.now());
-
-		if (msg.role === "user") {
-			const text = extractText(msg.content);
-			lines.push(`**${timestamp} [user]:** ${text}`);
-			lines.push("");
-		} else if (msg.role === "assistant") {
-			const text = extractText(msg.content);
-			// 截断过长的回复
-			const truncated = text.length > 500 ? text.slice(0, 500) + "..." : text;
-			lines.push(`**${timestamp} [assistant]:** ${truncated}`);
-			lines.push("");
-		} else if (msg.role === "toolResult" && opts.includeToolResults) {
-			const text = extractText(msg.content);
-			const truncated = text.length > 200 ? text.slice(0, 200) + "..." : text;
-			const toolName = (msg as any).toolName || "unknown";
-			lines.push(`**${timestamp} [tool:${toolName}]:** ${truncated}`);
-			lines.push("");
-		}
-	}
-
-	let markdownContent = lines.join("\n");
-
-	// 5. 截断过长的 Markdown
-	if (markdownContent.length > opts.maxMarkdownLength) {
-		markdownContent = markdownContent.slice(0, opts.maxMarkdownLength) + "\n\n... (历史消息已截断)";
-	}
-
-	// 6. 创建 Markdown 消息
-	const markdownMessage: Message = {
-		role: "user",
-		content: markdownContent,
-		timestamp: Date.now(),
-	};
-
-	// 7. 返回合并后的消息列表
-	return [markdownMessage, ...recentMessages];
+	// 【调试】临时禁用消息截断，验证问题是否由此引起
+	// 直接返回原始消息，不进行任何转换或截断
+	return convertToLlm(messages);
 }
