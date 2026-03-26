@@ -154,8 +154,16 @@ export class FeishuStore implements PlatformStore {
 				await this.larkClient.downloadFile(fileKey, localPath);
 			}
 			
-			this.logger?.debug("File downloaded", { fileKey, localPath });
-			console.log("[Feishu Store] File downloaded successfully:", localPath);
+			// 验证文件是否真的被写入
+			const { default: fs } = await import("fs");
+			if (!fs.existsSync(localPath)) {
+				console.error("[Feishu Store] File not found after download:", localPath);
+				throw new Error("File not found after download");
+			}
+			
+			const stats = fs.statSync(localPath);
+			this.logger?.debug("File downloaded", { fileKey, localPath, size: stats.size });
+			console.log("[Feishu Store] File downloaded successfully:", localPath, "Size:", stats.size);
 			return localPath;
 		} catch (error: any) {
 			this.logger?.error("Failed to download file", undefined, error as Error);

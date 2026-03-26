@@ -723,6 +723,7 @@ export class LarkClient {
 	 */
 	async downloadFile(fileKey: string, localPath: string): Promise<void> {
 		this.logger?.debug("Downloading file", { fileKey, localPath });
+		console.log(`[LarkClient] Downloading file: ${fileKey} -> ${localPath}`);
 
 		const response = await this.client.im.v1.file.get({
 			path: {
@@ -730,14 +731,48 @@ export class LarkClient {
 			},
 		});
 
+		console.log(`[LarkClient] Got response:`, typeof response, response ? Object.keys(response) : null);
+
 		if (!response) {
 			throw new Error("Failed to download file: no response");
 		}
 
-		// 写入文件
-		const writeResult = response.writeFile?.(localPath);
-		if (writeResult) {
-			await writeResult;
+		// 使用流式写入更可靠
+		const { createWriteStream } = await import("fs");
+		const { pipeline } = await import("stream/promises");
+		
+		try {
+			let readableStream: any;
+			
+			// 尝试获取可读流
+			if (response.getReadableStream) {
+				console.log(`[LarkClient] Using getReadableStream`);
+				readableStream = response.getReadableStream();
+				console.log(`[LarkClient] Got readable stream:`, !!readableStream);
+				
+				// 使用流式写入
+				const writeStream = createWriteStream(localPath);
+				console.log(`[LarkClient] Starting pipeline...`);
+				await pipeline(readableStream, writeStream);
+				console.log(`[LarkClient] Pipeline completed`);
+			} else if (response.writeFile) {
+				// 回退到 writeFile 方法
+				console.log(`[LarkClient] Using writeFile fallback`);
+				await response.writeFile(localPath);
+				this.logger?.debug("File written successfully via writeFile", { localPath });
+				console.log(`[LarkClient] writeFile completed`);
+				return;
+			} else {
+				console.error(`[LarkClient] No download method available`, response ? Object.keys(response) : null);
+				throw new Error("Failed to download file: no getReadableStream or writeFile method");
+			}
+
+			this.logger?.debug("File written successfully via stream", { localPath });
+			console.log(`[LarkClient] File written successfully: ${localPath}`);
+		} catch (error: any) {
+			console.error(`[LarkClient] Failed to write file:`, error?.message || error);
+			this.logger?.error("Failed to write file", { localPath, error: error?.message });
+			throw new Error(`Failed to write file: ${error?.message || String(error)}`);
 		}
 	}
 

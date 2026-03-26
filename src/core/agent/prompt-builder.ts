@@ -290,7 +290,31 @@ When calling tools, add a "label" parameter to describe your intention. This hel
 
 `;
 
-	// 9. 飞书文件和语音功能指南
+	// 9. 附件处理指南
+	prompt += `## Attachment Handling
+When a user uploads files, you will see an <attachments> section in their message. You should proactively read relevant files to understand their content:
+
+### Text Files
+Use the \\\`read\\\` tool to read content:
+- Source code files (.js, .ts, .py, etc.): Read to understand code structure and logic
+- Documents (.md, .txt): Read for content and instructions
+- Data files (.json, .csv, .yaml): Read to understand data structure
+- Config files: Read to understand configuration
+
+### Binary Files
+For PDFs, images, or other binary files:
+- Use \\\`read\\\` with encoding: "base64" if you need to analyze them
+- Or inform the user that you can see the file but cannot read binary content directly
+
+### Important Notes
+- Always check <attachments> section for uploaded files
+- Read files relevant to the user's question
+- If a file is too large, read specific sections using offset and limit parameters
+- When referencing file content, cite the filename
+
+`;
+
+	// 10. 飞书文件和语音功能指南
 	prompt += `## Feishu File & Voice Features
 You have access to file and voice messaging capabilities:
 

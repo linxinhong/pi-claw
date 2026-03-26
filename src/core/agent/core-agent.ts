@@ -381,7 +381,7 @@ export class CoreAgent {
 			await this.updateSystemPrompt(state, chatId, channelDir, platformContext, additionalContext);
 
 			// 准备用户消息
-			const userMessage = this.formatUserMessage(message, additionalContext);
+			const userMessage = await this.formatUserMessage(message, additionalContext);
 
 			// 验证用户消息不为空
 			if (!userMessage || userMessage.trim().length === 0) {
@@ -1274,7 +1274,7 @@ export class CoreAgent {
 	/**
 	 * 格式化用户消息
 	 */
-	private formatUserMessage(message: UniversalMessage, additionalContext: Partial<AgentContext>): string {
+	private async formatUserMessage(message: UniversalMessage, additionalContext: Partial<AgentContext>): Promise<string> {
 		const now = new Date();
 		const pad = (n: number) => n.toString().padStart(2, "0");
 		const offset = -now.getTimezoneOffset();
@@ -1289,11 +1289,145 @@ export class CoreAgent {
 		// 处理非图片附件
 		const nonImageAttachments = (message.attachments || []).filter((a) => a.type !== "image");
 		if (nonImageAttachments.length > 0) {
-			const paths = nonImageAttachments.map((a) => a.localPath).join("\n");
-			userMessage += `\n\n<attachments>\n${paths}\n</attachments>`;
+			const attachmentInfo = await Promise.all(
+				nonImageAttachments.map(async (a, index) => {
+					const fileType = this.getFileTypeDescription(a.name);
+					const fileSize = await this.getFileSize(a.localPath);
+					const isText = this.isTextFile(a.name);
+					const sizeStr = fileSize ? `, ${fileSize}` : "";
+					const typeStr = isText ? "文本" : "二进制";
+					return `${index + 1}. 📎 ${a.name} (${fileType}, ${typeStr}${sizeStr}) - 路径: ${a.localPath}`;
+				})
+			);
+			userMessage += `\n\n<attachments>\n用户上传了以下附件，请使用 read 工具读取需要的内容：\n${attachmentInfo.join("\n")}\n</attachments>`;
 		}
 
 		return userMessage;
+	}
+
+	/**
+	 * 获取文件大小（格式化显示）
+	 */
+	private async getFileSize(filePath: string): Promise<string | null> {
+		try {
+			const { stat } = await import("fs/promises");
+			const stats = await stat(filePath);
+			const bytes = stats.size;
+
+			if (bytes < 1024) return `${bytes}B`;
+			if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+			if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+			return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)}GB`;
+		} catch {
+			return null;
+		}
+	}
+
+	/**
+	 * 判断是否为文本文件
+	 */
+	private isTextFile(fileName: string): boolean {
+		const textExtensions = new Set([
+			// 文档
+			"txt", "md", "markdown",
+			// 代码文件
+			"js", "ts", "jsx", "tsx", "py", "java", "go", "rs", "c", "cpp", "h", "rb", "php",
+			"html", "htm", "css", "scss", "less", "sql", "sh", "bash", "zsh", "ps1", "vim",
+			// 数据文件
+			"json", "jsonl", "yaml", "yml", "xml", "csv",
+			// 配置文件
+			"conf", "config", "ini", "properties", "env",
+			// 日志文件
+			"log",
+		]);
+		const ext = fileName.toLowerCase().split(".").pop() || "";
+		return textExtensions.has(ext);
+	}
+
+	/**
+	 * 获取文件类型描述
+	 */
+	private getFileTypeDescription(fileName: string): string {
+		const ext = fileName.toLowerCase().split(".").pop() || "";
+		
+		const typeMap: Record<string, string> = {
+			// 文档
+			"pdf": "PDF 文档",
+			"doc": "Word 文档",
+			"docx": "Word 文档",
+			"xls": "Excel 表格",
+			"xlsx": "Excel 表格",
+			"ppt": "PPT 演示文稿",
+			"pptx": "PPT 演示文稿",
+			"txt": "文本文件",
+			"md": "Markdown 文档",
+			"markdown": "Markdown 文档",
+			// 代码文件
+			"js": "JavaScript 代码",
+			"ts": "TypeScript 代码",
+			"jsx": "React JSX",
+			"tsx": "React TSX",
+			"py": "Python 代码",
+			"java": "Java 代码",
+			"go": "Go 代码",
+			"rs": "Rust 代码",
+			"c": "C 代码",
+			"cpp": "C++ 代码",
+			"h": "头文件",
+			"rb": "Ruby 代码",
+			"php": "PHP 代码",
+			"html": "HTML 文档",
+			"css": "CSS 样式",
+			"scss": "SCSS 样式",
+			"less": "LESS 样式",
+			"sql": "SQL 脚本",
+			"sh": "Shell 脚本",
+			"bash": "Bash 脚本",
+			"zsh": "Zsh 脚本",
+			"ps1": "PowerShell 脚本",
+			// 数据文件
+			"json": "JSON 数据",
+			"jsonl": "JSON Lines",
+			"yaml": "YAML 配置",
+			"yml": "YAML 配置",
+			"xml": "XML 数据",
+			"csv": "CSV 表格",
+			// 配置文件
+			"conf": "配置文件",
+			"config": "配置文件",
+			"ini": "INI 配置",
+			"properties": "Properties 配置",
+			"env": "环境变量配置",
+			// 日志文件
+			"log": "日志文件",
+			// 压缩文件
+			"zip": "ZIP 压缩包",
+			"tar": "TAR 归档",
+			"gz": "Gzip 压缩",
+			"rar": "RAR 压缩包",
+			"7z": "7z 压缩包",
+			// 音视频
+			"mp3": "音频文件",
+			"mp4": "视频文件",
+			"wav": "WAV 音频",
+			"avi": "AVI 视频",
+			"mov": "QuickTime 视频",
+			"mkv": "Matroska 视频",
+			// 图片（虽然通常单独处理）
+			"png": "PNG 图片",
+			"jpg": "JPEG 图片",
+			"jpeg": "JPEG 图片",
+			"gif": "GIF 图片",
+			"webp": "WebP 图片",
+			"svg": "SVG 矢量图",
+			// 其他
+			"exe": "可执行文件",
+			"dll": "动态链接库",
+			"so": "共享库",
+			"dylib": "动态库",
+		};
+
+		return typeMap[ext] || `${ext.toUpperCase()} 文件`;
 	}
 
 	/**

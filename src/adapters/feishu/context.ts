@@ -1431,6 +1431,7 @@ export class FeishuPlatformContext implements PlatformContext {
 
 	/**
 	 * 格式化工具参数（简化显示）
+	 * 超长时采用中间截断，保留前后各25字符
 	 */
 	private formatToolArgs(args: Record<string, any>): string {
 		const keys = Object.keys(args).filter(k => !k.startsWith("_"));
@@ -1439,7 +1440,7 @@ export class FeishuPlatformContext implements PlatformContext {
 		// 对于 bash 工具，显示命令
 		if (args.command) {
 			const cmd = String(args.command);
-			return cmd.length > 50 ? cmd.substring(0, 50) + "..." : cmd;
+			return this.truncateMiddle(cmd, 50);
 		}
 
 		// 对于 read 工具，显示文件路径
@@ -1451,7 +1452,20 @@ export class FeishuPlatformContext implements PlatformContext {
 		// 其他工具，显示第一个参数的值
 		const firstKey = keys[0];
 		const value = String(args[firstKey]);
-		return value.length > 50 ? value.substring(0, 50) + "..." : value;
+		return this.truncateMiddle(value, 50);
+	}
+
+	/**
+	 * 中间截断字符串
+	 * @param str 原字符串
+	 * @param maxLength 最大长度
+	 * @returns 截断后的字符串（保留前后部分）
+	 */
+	private truncateMiddle(str: string, maxLength: number): string {
+		if (str.length <= maxLength) return str;
+
+		const keepLength = Math.floor((maxLength - 3) / 2); // 减去 "..." 的 3 个字符
+		return str.substring(0, keepLength) + "..." + str.substring(str.length - keepLength);
 	}
 
 	/**
