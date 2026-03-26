@@ -48,6 +48,12 @@
     "typescript": "^5.0.0",
     "vitest": "^2.0.0"
   },
+  "optionalDependencies": {
+    "sqlite-vec": "^0.1.0",
+    "better-sqlite3": "^9.0.0",
+    "node-llama-cpp": "^3.0.0",
+    "bun": "^1.0.0"
+  },
   "engines": {
     "node": ">=18.0.0"
   }
