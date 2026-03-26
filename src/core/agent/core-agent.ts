@@ -1059,7 +1059,29 @@ export class CoreAgent {
 		const loadedSession = state.sessionManager.buildSessionContext();
 		if (loadedSession.messages.length > 0) {
 			const maxMessages = 40;
-			const messages = loadedSession.messages.slice(-maxMessages);
+			let messages = loadedSession.messages.slice(-maxMessages);
+
+			// 【修复】检查截断边界，确保没有孤立的 tool result
+			// 如果第一条消息是 tool result，其对应的 assistant 可能被截断到了前面
+			if (messages.length > 0) {
+				const firstMsg = messages[0] as any;
+				if (firstMsg.role === "toolResult" && firstMsg.toolCallId) {
+					// 在截断前的消息中查找对应的 assistant
+					const beforeSlice = loadedSession.messages.slice(0, -maxMessages);
+					for (let i = beforeSlice.length - 1; i >= 0; i--) {
+						const msg = beforeSlice[i] as any;
+						if (msg.role === "assistant" && msg.toolCalls) {
+							const hasMatchingToolCall = msg.toolCalls.some((tc: any) => tc.id === firstMsg.toolCallId);
+							if (hasMatchingToolCall) {
+								// 找到了对应的 assistant，将其添加到消息列表开头
+								messages.unshift(msg);
+								log.logInfo(`[Agent] Added missing assistant message for tool call ${firstMsg.toolCallId}`);
+								break;
+							}
+						}
+					}
+				}
+			}
 
 			// 验证消息历史：确保 toolResult 消息有对应的 tool_calls
 			const validMessages: typeof messages = [];
@@ -1135,6 +1157,25 @@ export class CoreAgent {
 				const maxAllowed = Math.max(5, Math.floor(targetLength / avgMsgLength));
 				finalMessages = validMessages.slice(-maxAllowed);
 				log.logWarning(`[Agent] Reducing messages from ${validMessages.length} to ${finalMessages.length} due to length limit`);
+				
+				// 【修复】再次检查截断边界
+				if (finalMessages.length > 0) {
+					const firstMsg = finalMessages[0] as any;
+					if (firstMsg.role === "toolResult" && firstMsg.toolCallId) {
+						// 在截断前的消息中查找对应的 assistant
+						for (let i = validMessages.length - finalMessages.length - 1; i >= 0; i--) {
+							const msg = validMessages[i] as any;
+							if (msg.role === "assistant" && msg.toolCalls) {
+								const hasMatchingToolCall = msg.toolCalls.some((tc: any) => tc.id === firstMsg.toolCallId);
+								if (hasMatchingToolCall) {
+									finalMessages.unshift(msg);
+									log.logInfo(`[Agent] Added missing assistant message for tool call ${firstMsg.toolCallId} (length limit)`);
+									break;
+								}
+							}
+						}
+					}
+				}
 			}
 
 			state.agent.replaceMessages(finalMessages);
