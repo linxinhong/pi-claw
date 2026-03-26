@@ -43,3 +43,4 @@ test-temp/
 # Temporary files
 *.tmp
 *.temp
+.claude/
