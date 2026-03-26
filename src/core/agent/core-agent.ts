@@ -21,7 +21,7 @@ import { join } from "path";
 import { getChannelDir } from "../../utils/config.js";
 import type { AgentContext } from "./context.js";
 import { buildSystemPrompt, generateHistoryMarkdown, loadBootFiles, loadMemoryContent, loadSkills } from "./prompt-builder.js";
-import { convertToMarkdown, safeTruncateMessages } from "./message-formatter.js";
+import { compactMessages, convertToMarkdown, safeTruncateMessages } from "./message-formatter.js";
 import type { ModelManager } from "../model/manager.js";
 import type { PlatformContext } from "../platform/context.js";
 import type { UniversalMessage } from "../platform/message.js";
@@ -892,19 +892,16 @@ export class CoreAgent {
 		// 检查是否隐藏思考过程（默认显示思考）
 		const hideThinking = (platformContext as any).isThinkingHidden?.() ?? false;
 
-		// 创建带 Markdown 转换和截断的 convertToLlm 函数
-		// 策略：将历史消息转换为 Markdown 格式，保留最近消息为原始格式
-		const maxMessages = 40;
-		const convertToLlmWithTruncation = (messages: Parameters<typeof convertToLlm>[0]): ReturnType<typeof convertToLlm> => {
-			// 使用 Markdown 转换（内部会调用 convertToLlm）
-			const converted = convertToMarkdown(messages, {
-				keepRecentMessages: 10, // 保留 5 轮对话
-				maxMarkdownLength: 10000,
-				includeToolResults: false,
+		// 创建带智能 Compact 的 convertToLlm 函数
+		// 策略：分层保留消息，支持长任务（50+轮）
+		const convertToLlmWithCompact = (messages: Parameters<typeof convertToLlm>[0]): ReturnType<typeof convertToLlm> => {
+			// 使用智能分层 Compact
+			// 10轮完整 + 20轮Markdown简化 = 最多50轮上下文
+			return compactMessages(messages, {
+				fullRounds: 10,
+				markdownRounds: 20,
+				maxTotalRounds: 50,
 			});
-
-			// 最终截断到 maxMessages 条（使用安全截断，避免孤立 toolResult）
-			return safeTruncateMessages(converted, maxMessages);
 		};
 
 		// 创建 Agent
@@ -915,7 +912,7 @@ export class CoreAgent {
 				thinkingLevel: hideThinking ? "off" : "medium",
 				tools,
 			},
-			convertToLlm: convertToLlmWithTruncation,
+			convertToLlm: convertToLlmWithCompact,
 			getApiKey: async () => getApiKeyForModel(model, state.modelRegistry!),
 			// 【修复】Minimax 等模型的 tool call ID 不匹配问题
 			onPayload: (payload: unknown, _model: typeof model) => {
@@ -1058,7 +1055,8 @@ export class CoreAgent {
 		// 加载历史消息
 		const loadedSession = state.sessionManager.buildSessionContext();
 		if (loadedSession.messages.length > 0) {
-			const maxMessages = 40;
+			// 【修改】增大最大消息数到 100（约50轮），配合 compact 策略使用
+			const maxMessages = 100;
 			let messages = loadedSession.messages.slice(-maxMessages);
 
 			// 【修复】检查截断边界，确保没有孤立的 tool result

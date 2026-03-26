@@ -43,6 +43,25 @@ export interface MarkdownOptions {
 }
 
 /**
+ * 智能分层 Compact 配置
+ */
+export interface CompactConfig {
+	/** 完整保留的轮数（每轮 = assistant + tool result） */
+	fullRounds: number;
+	/** Markdown 简化的轮数 */
+	markdownRounds: number;
+	/** 最大总轮数（超过后丢弃） */
+	maxTotalRounds: number;
+}
+
+/** 默认 Compact 配置 */
+export const DEFAULT_COMPACT_CONFIG: CompactConfig = {
+	fullRounds: 10,      // 完整保留 10 轮
+	markdownRounds: 20,  // Markdown 简化 20 轮
+	maxTotalRounds: 50,  // 最多 50 轮
+};
+
+/**
  * 安全截断消息，确保不会留下孤立的 toolResult 消息
  * 规则：如果最后一条消息是 toolResult，则必须保留对应的 assistant 消息
  */
@@ -220,4 +239,124 @@ export function convertToMarkdown(
 
 	// 7. 返回合并后的消息列表
 	return [markdownMessage, ...recentMessages];
+}
+
+/**
+ * 智能分层 Compact 消息
+ * 
+ * 分层策略：
+ * 1. 最近 N 轮：完整保留
+ * 2. 接下来 M 轮：Markdown 简化
+ * 3. 更旧的消息：丢弃
+ * 
+ * 这样可以支持长任务（50+轮），同时控制 token 消耗
+ */
+export function compactMessages(
+	messages: Parameters<typeof convertToLlm>[0],
+	config: Partial<CompactConfig> = {},
+): ReturnType<typeof convertToLlm> {
+	const opts = { ...DEFAULT_COMPACT_CONFIG, ...config };
+	
+	// 1. 先过滤消息
+	const filtered = convertToLlm(messages);
+	
+	// 计算各层消息数（每轮 = 2条消息：assistant + tool result/user）
+	const fullMessages = opts.fullRounds * 2;
+	const markdownMessages = opts.markdownRounds * 2;
+	const maxTotalMessages = opts.maxTotalRounds * 2;
+	
+	// 2. 如果消息数少于完整保留数，直接返回
+	if (filtered.length <= fullMessages) {
+		return filtered;
+	}
+	
+	// 3. 分割消息为三层
+	// 从后往前：完整层 | Markdown层 | 丢弃层
+	const fullLayer = filtered.slice(-fullMessages);
+	const remainingForMarkdown = filtered.slice(0, filtered.length - fullMessages);
+	
+	// 4. 处理 Markdown 层
+	let markdownLayer: typeof filtered = [];
+	if (remainingForMarkdown.length > 0) {
+		// 取最近的部分用于 Markdown，其余丢弃
+		const markdownSlice = remainingForMarkdown.slice(-markdownMessages);
+		
+		// 使用 convertToMarkdown 处理 Markdown 层
+		// 注意：这里我们需要特殊处理，因为 convertToMarkdown 会再分割
+		// 我们直接手动转换
+		const lines: string[] = ["## 历史对话摘要", ""];
+		
+		for (const msg of markdownSlice) {
+			const timestamp = formatTimestamp((msg as any).timestamp || Date.now());
+			
+			if (msg.role === "user") {
+				const text = extractText(msg.content);
+				lines.push(`**${timestamp} [user]:** ${text.slice(0, 200)}${text.length > 200 ? '...' : ''}`);
+			} else if (msg.role === "assistant") {
+				const text = extractText(msg.content);
+				// 截断过长的回复
+				const truncated = text.length > 150 ? text.slice(0, 150) + "..." : text;
+				lines.push(`**${timestamp} [assistant]:** ${truncated}`);
+			}
+			// toolResult 不显示，避免混乱
+		}
+		
+		const markdownContent = lines.join("\n");
+		
+		// 创建 Markdown 消息
+		const markdownMessage: Message = {
+			role: "user",
+			content: markdownContent,
+			timestamp: Date.now(),
+		};
+		
+		markdownLayer = [markdownMessage];
+	}
+	
+	// 5. 检查边界：确保完整层的第一条不是孤立的 tool result
+	// 如果完整层的开头是 tool result，其 assistant 可能在 Markdown 层
+	if (fullLayer.length > 0) {
+		const firstFull = fullLayer[0] as any;
+		if (firstFull.role === "toolResult" && firstFull.toolCallId) {
+			// 在 Markdown 层的原始消息中查找对应的 assistant
+			const originalIndex = filtered.findIndex((m: any) => 
+				m.role === "assistant" && 
+				m.toolCalls?.some((tc: any) => tc.id === firstFull.toolCallId)
+			);
+			
+			if (originalIndex >= 0 && originalIndex < filtered.length - fullMessages) {
+				// 找到了，把这个 assistant 移到完整层开头
+				const assistantMsg = filtered[originalIndex];
+				fullLayer.unshift(assistantMsg);
+				
+				// 如果 Markdown 层包含这条消息，需要更新
+				// 简单处理：重新生成 Markdown 层（去掉这条消息）
+				if (markdownLayer.length > 0) {
+					const newMarkdownSlice = filtered.slice(
+						Math.max(0, filtered.length - fullMessages - markdownMessages - 1),
+						originalIndex
+					).concat(filtered.slice(originalIndex + 1, filtered.length - fullMessages));
+					
+					if (newMarkdownSlice.length > 0) {
+						const newLines: string[] = ["## 历史对话摘要", ""];
+						for (const msg of newMarkdownSlice.slice(-markdownMessages)) {
+							const timestamp = formatTimestamp((msg as any).timestamp || Date.now());
+							if (msg.role === "user") {
+								const text = extractText(msg.content);
+								newLines.push(`**${timestamp} [user]:** ${text.slice(0, 200)}${text.length > 200 ? '...' : ''}`);
+							} else if (msg.role === "assistant") {
+								const text = extractText(msg.content);
+								const truncated = text.length > 150 ? text.slice(0, 150) + "..." : text;
+								newLines.push(`**${timestamp} [assistant]:** ${truncated}`);
+							}
+						}
+						markdownLayer[0].content = newLines.join("\n");
+					}
+				}
+			}
+		}
+	}
+	
+	// 6. 合并返回：Markdown 层 + 完整层
+	return [...markdownLayer, ...fullLayer];
 }
