@@ -916,7 +916,12 @@ export class CoreAgent {
 			getApiKey: async () => getApiKeyForModel(model, state.modelRegistry!),
 			// 【修复】Minimax 等模型的 tool call ID 不匹配问题
 			onPayload: (payload: unknown, _model: typeof model) => {
-				// 【强调试】确保这行日志一定会输出
+				// 【强调试】确保这行日志一定会输出（绕过 stdout 重定向）
+				try {
+					import("fs").then(fs => {
+						fs.appendFileSync("/root/.pi-claw/logs/onpayload-debug.log", `[${new Date().toISOString()}] onPayload CALLED\n`);
+					}).catch(() => {});
+				} catch {}
 				console.log(`[Agent][onPayload] CALLED`);
 				log.logInfo(`[Agent][onPayload] CALLED`);
 				
