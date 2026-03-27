@@ -17,7 +17,6 @@ import type {
 	ToolCalledContext,
 	MessageSentContext,
 	AgentTurnEndContext,
-	SystemPromptBuildContext,
 } from "../../core/hook/types.js";
 import { getHookManager, HOOK_NAMES } from "../../core/hook/index.js";
 
@@ -601,71 +600,9 @@ ${entry.suggestedAction}
 			);
 		}
 
-		// ========== 系统提示词注入 ==========
-		hookManager.on<SystemPromptBuildContext>(
-			HOOK_NAMES.SYSTEM_PROMPT_BUILD,
-			async (ctx, next) => {
-				// 构建功能可用性说明
-				const features: string[] = [];
-				const missingDeps: string[] = [];
-				
-				if (this.semanticSearchAvailable) {
-					features.push("- 语义搜索 (semantic_search): 使用自然语言搜索相关记录");
-				} else {
-					missingDeps.push("| sqlite-vec       | 向量数据库存储                     | npm install sqlite-vec |\n| better-sqlite3   | SQLite 数据库（sqlite-vec 需要）   | npm install better-sqlite3 |\n| node-llama-cpp   | 本地嵌入生成                       | npm install node-llama-cpp |");
-				}
-
-				// 在系统提示词末尾追加使用指南
-				const guidelines = `
-
-## Recording Guidelines (QMD Recorder)
-
-Use these tools to maintain a knowledge base of learnings, errors, and feature requests.
-Records are saved to: ${this.config.recordsDir}
-
-### When to use record_learning
-- User corrects you ("No, that's wrong...", "Actually...", "You should...")
-- You discover a better approach after trying something
-- User explains project conventions you didn't know
-- You solve a non-obvious problem that required debugging
-- User provides feedback on your behavior or approach
-
-### When to use record_error
-- A command or API call fails unexpectedly
-- Tool execution returns an error
-- Something works differently than you expected
-- You encounter a recurring issue
-
-### When to use record_feature_request
-- User says "Can you also...", "I wish you could...", "Why can't you..."
-- User asks for functionality that doesn't exist yet
-- User describes a problem that could be solved with a new feature
-
-### When to use query_records
-- Before starting a complex task, check if similar issues were recorded
-- User asks about past problems, decisions, or solutions
-- You want to avoid repeating a mistake that was previously logged
-
-${features.length > 0 ? `### Advanced Features Available\n${features.join("\n")}\n` : ""}${missingDeps.length > 0 ? `### Optional Dependencies for Advanced Features
-To enable semantic search, install the following dependencies:
-
-| Package          | Purpose                            | Install Command |
-|------------------|------------------------------------|-----------------|
-${missingDeps.join("\n")}
-
-Then set "enableSemanticSearch": true in the plugin config.
-` : ""}
-### Recording Best Practices
-- Be specific: include what happened, why it matters, and what to do about it
-- Use tags: add relevant keywords to make records searchable
-- Link related files: include paths to relevant code or documentation
-- Set appropriate priority: critical > high > medium > low
-`;
-				ctx.prompt += guidelines;
-				return next();
-			},
-			{ source: this.meta.id, priority: 100 }
-		);
+		// 注意：不再使用 SYSTEM_PROMPT_BUILD hook 注入工具描述
+		// 工具描述已迁移到各工具的 description 字段中
+		// 这样可以避免 system prompt 中出现重复的工具定义
 
 		this.logger?.info(`[QMD Recorder] 初始化完成，记录目录: ${this.config.recordsDir}${this.semanticSearchAvailable ? "，语义搜索已启用" : ""}`, { plugin: this.meta.id });
 	}
@@ -679,7 +616,20 @@ Then set "enableSemanticSearch": true in the plugin config.
 			{
 				name: "record_learning",
 				label: "记录学习",
-				description: "记录学习心得、知识更新或最佳实践",
+				description: `记录学习心得、知识更新或最佳实践。
+
+使用场景：
+- 用户纠正你时（"No, that's wrong...", "Actually...", "You should..."）
+- 你发现了更好的方法
+- 用户解释了你不了解的项目规范
+- 你解决了需要调试的非明显问题
+- 用户对你的行为或方法提供反馈
+
+最佳实践：
+- 具体说明发生了什么、为什么重要、该怎么做
+- 添加相关关键词作为标签，方便搜索
+- 包含相关代码或文档的路径
+- 设置适当的优先级：critical > high > medium > low`,
 				parameters: {
 					type: "object",
 					properties: {
@@ -725,7 +675,19 @@ Then set "enableSemanticSearch": true in the plugin config.
 			{
 				name: "record_error",
 				label: "记录错误",
-				description: "记录发生的错误、故障或异常情况",
+				description: `记录发生的错误、故障或异常情况。
+
+使用场景：
+- 命令或 API 调用意外失败
+- 工具执行返回错误
+- 某些工作方式与预期不同
+- 遇到重复出现的问题
+
+最佳实践：
+- 具体说明发生了什么、为什么重要、该怎么修复
+- 添加相关关键词作为标签，方便搜索
+- 包含相关代码或文档的路径
+- 设置适当的优先级：critical > high > medium > low`,
 				parameters: {
 					type: "object",
 					properties: {
@@ -773,7 +735,18 @@ Then set "enableSemanticSearch": true in the plugin config.
 			{
 				name: "record_feature_request",
 				label: "记录特性请求",
-				description: "记录用户请求的新功能或改进建议",
+				description: `记录用户请求的新功能或改进建议。
+
+使用场景：
+- 用户说"Can you also...", "I wish you could...", "Why can't you..."
+- 用户请求尚未存在的功能
+- 用户描述可以通过新功能解决的问题
+
+最佳实践：
+- 清晰描述请求的功能和用户场景
+- 评估复杂度：simple / medium / complex
+- 设置适当的优先级：critical > high > medium > low
+- 如有想法，提供建议的实现方案`,
 				parameters: {
 					type: "object",
 					properties: {
@@ -817,7 +790,14 @@ Then set "enableSemanticSearch": true in the plugin config.
 			{
 				name: "query_records",
 				label: "查询记录",
-				description: "查询记录文件",
+				description: `查询记录文件。
+
+使用场景：
+- 开始复杂任务前，检查是否记录过类似问题
+- 用户询问过去的问题、决策或解决方案
+- 你想避免重复之前记录过的错误
+
+说明：记录以 QMD (Quarto Markdown) 格式保存在 ${this.config.recordsDir} 目录`,
 				parameters: {
 					type: "object",
 					properties: {
