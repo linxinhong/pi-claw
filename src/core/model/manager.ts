@@ -337,7 +337,7 @@ export class ModelManager {
 			throw new Error(`Model instance not found: ${config.provider}/${config.model}`);
 		}
 
-		log.logInfo(`[ModelManager] Got model instance: ${config.provider}/${config.model}`);
+		log.logInfo(`[ModelManager] Got model instance: ${config.model} (provider: ${config.provider}, baseUrl: ${config.baseUrl || "(default)"})`);
 		return model;
 	}
 

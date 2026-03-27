@@ -1258,7 +1258,7 @@ export class CoreAgent {
 			log.logInfo(`[Agent] Loaded ${finalMessages.length} messages from context (system prompt: ${systemPromptLength}, messages: ${messagesLength})`);
 		}
 
-		log.logInfo(`[Agent] Initialized for channel ${chatId} with model ${model.id}`);
+		log.logInfo(`[Agent] Initialized for channel ${chatId} with model ${model.id} (provider: ${model.provider}, baseUrl: ${model.baseUrl || "(default)"})`);
 
 		// 触发 AGENT_INIT_END hook
 		if (hookManager?.hasHooks(HOOK_NAMES.AGENT_INIT_END)) {
