@@ -916,6 +916,10 @@ export class CoreAgent {
 			getApiKey: async () => getApiKeyForModel(model, state.modelRegistry!),
 			// 【修复】Minimax 等模型的 tool call ID 不匹配问题
 			onPayload: (payload: unknown, _model: typeof model) => {
+				// 【强调试】确保这行日志一定会输出
+				console.log(`[Agent][onPayload] CALLED`);
+				log.logInfo(`[Agent][onPayload] CALLED`);
+				
 				const params = payload as {
 					messages?: Array<{
 						role?: string;
@@ -925,6 +929,7 @@ export class CoreAgent {
 					}>;
 				};
 				if (!params?.messages || !Array.isArray(params.messages)) {
+					console.log(`[Agent][onPayload] Early return: no messages`);
 					return payload;
 				}
 
