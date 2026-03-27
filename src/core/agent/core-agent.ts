@@ -928,17 +928,38 @@ export class CoreAgent {
 					return payload;
 				}
 
-				// 收集所有 assistant 消息中的 tool call ID
+				// 【调试】打印所有消息的角色和 tool 相关信息
+				log.logInfo(`[Agent][onPayload] Processing ${params.messages.length} messages`);
+				for (let i = 0; i < params.messages.length; i++) {
+					const msg = params.messages[i];
+					if (msg.role === "assistant" && msg.tool_calls) {
+						const ids = msg.tool_calls.map(tc => tc.id).filter(Boolean);
+						if (ids.length > 0) {
+							log.logInfo(`[Agent][onPayload] [#${i}] assistant tool_calls: ${ids.join(", ")}`);
+						}
+					} else if (msg.role === "tool" && msg.tool_call_id) {
+						log.logInfo(`[Agent][onPayload] [#${i}] tool tool_call_id: ${msg.tool_call_id}`);
+					}
+				}
+
+				// 收集所有 assistant 消息中的 tool call ID（包括多种格式变体）
 				const assistantToolCallIds = new Set<string>();
 				for (const msg of params.messages) {
 					if (msg.role === "assistant" && msg.tool_calls) {
 						for (const tc of msg.tool_calls) {
 							if (tc.id) {
 								assistantToolCallIds.add(tc.id);
+								// 也添加可能的变体格式
+								assistantToolCallIds.add(tc.id.replace(/_/g, "-"));
+								assistantToolCallIds.add(tc.id.replace(/-/g, "_"));
+								assistantToolCallIds.add(tc.id.replace(/_\d+$/, ""));
+								assistantToolCallIds.add(tc.id.replace(/-\d+$/, ""));
 							}
 						}
 					}
 				}
+
+				log.logInfo(`[Agent][onPayload] Collected ${assistantToolCallIds.size} tool call ID variants`)
 
 				// 如果没有 tool calls，直接返回
 				if (assistantToolCallIds.size === 0) {
@@ -1007,6 +1028,31 @@ export class CoreAgent {
 										fixed = true;
 										break;
 									}
+								}
+							}
+						}
+
+						// 【新策略 3】如果还是找不到，尝试前缀匹配
+						if (!fixed) {
+							// 收集所有可能的原始 ID（不带变体的）
+							const originalIds = new Set<string>();
+							for (const m of params.messages) {
+								if (m.role === "assistant" && m.tool_calls) {
+									for (const tc of m.tool_calls) {
+										if (tc.id) originalIds.add(tc.id);
+									}
+								}
+							}
+							// 尝试模糊匹配 - 如果 tool ID 包含某个 assistant ID 的前缀
+							for (const id of originalIds) {
+								const idBase = id.replace(/_\d+$/, "").replace(/-\d+$/, "");
+								const originalBase = originalId.replace(/_\d+$/, "").replace(/-\d+$/, "");
+								if (idBase === originalBase || originalId.startsWith(id) || id.startsWith(originalBase)) {
+									log.logInfo(`[Agent][onPayload] [#${index}] Fixed by prefix match: ${originalId} -> ${id}`);
+									msg.tool_call_id = id;
+									hasFix = true;
+									fixed = true;
+									break;
 								}
 							}
 						}
