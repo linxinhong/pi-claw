@@ -577,6 +577,18 @@ export class CoreAgent {
 								log.logInfo(`[Agent] Error response: ${assistantMsg.errorMessage}`);
 							}
 
+							// 【新增】处理 think 标签，提取 thinking 内容并剥离标签
+							const { reasoningText, answerText } = splitReasoningAndAnswer(responseContent);
+							if (reasoningText && answerText) {
+								// 如果有 thinking 内容，更新 thinking 卡片
+								if ((platformContext as any).updateThinking) {
+									await (platformContext as any).updateThinking(reasoningText);
+								}
+								// 使用剥离 think 标签后的回答内容
+								responseContent = answerText;
+								log.logInfo(`[Agent] Extracted thinking content (${reasoningText.length} chars), answer content (${answerText.length} chars)`);
+							}
+
 							finalResponse = responseContent;
 
 							// 完成思考卡片（传递 stopReason 以区分中间 turn 和最终 turn）
@@ -894,13 +906,23 @@ export class CoreAgent {
 
 		// 创建带智能 Compact 的 convertToLlm 函数
 		// 策略：分层保留消息，支持长任务（50+轮）
+		// 【修复】MiniMax 模型禁用 Markdown 压缩，避免 tool call ID 不匹配
+		const isMiniMaxModel = model.id.toLowerCase().includes("minimax") || 
+		                       model.provider.toLowerCase().includes("minimax");
+		
+		if (isMiniMaxModel) {
+			log.logInfo(`[Agent] Detected MiniMax model (${model.id}), disabling Markdown compression for tool call compatibility`);
+		}
+		
 		const convertToLlmWithCompact = (messages: Parameters<typeof convertToLlm>[0]): ReturnType<typeof convertToLlm> => {
 			// 使用智能分层 Compact
 			// 10轮完整 + 20轮Markdown简化 = 最多50轮上下文
+			// MiniMax 模型跳过 Markdown 转换，避免 tool call ID 问题
 			return compactMessages(messages, {
 				fullRounds: 10,
 				markdownRounds: 20,
 				maxTotalRounds: 50,
+				skipMarkdown: isMiniMaxModel, // MiniMax 禁用 Markdown 压缩
 			});
 		};
 
@@ -1575,6 +1597,85 @@ export class CoreAgent {
 		channelStates.delete(channelId);
 		log.logInfo(`[Agent] Destroyed state for channel ${channelId}`);
 	}
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * 分割思考内容和回答内容
+ * 从 AI 模型输出中提取 think 标签内的思考内容和标签外的回答内容
+ * 
+ * 支持格式：
+ * - <think>...</think>
+ * - <thinking>...</thinking>
+ * - <thought>...</thought>
+ * 
+ * @param text 原始文本
+ * @returns { reasoningText?: string, answerText?: string }
+ */
+function splitReasoningAndAnswer(text: string): { reasoningText?: string; answerText?: string } {
+	if (!text || typeof text !== "string") {
+		return { answerText: text };
+	}
+
+	// 匹配各种 think 标签的正则表达式
+	const thinkingTagPattern = /<(\/?)\s*(?:think(?:ing)?|thought)\s*>/gi;
+	
+	let reasoningText = "";
+	let answerText = "";
+	let lastIndex = 0;
+	let inThinking = false;
+	let hasThinkingTag = false;
+
+	// 重置正则表达式的 lastIndex
+	thinkingTagPattern.lastIndex = 0;
+
+	for (const match of text.matchAll(thinkingTagPattern)) {
+		hasThinkingTag = true;
+		const idx = match.index ?? 0;
+
+		if (inThinking) {
+			// 如果在 think 块内，收集思考内容
+			reasoningText += text.slice(lastIndex, idx);
+		} else {
+			// 如果在 think 块外，收集回答内容
+			answerText += text.slice(lastIndex, idx);
+		}
+
+		// 判断是开标签还是闭标签
+		inThinking = match[1] !== "/";
+		lastIndex = idx + match[0].length;
+	}
+
+	// 如果没有找到 think 标签，直接返回原文本作为回答
+	if (!hasThinkingTag) {
+		return { answerText: text };
+	}
+
+	// 处理剩余内容
+	if (inThinking) {
+		// 如果 think 标签未闭合，剩余内容也算作思考内容
+		reasoningText += text.slice(lastIndex);
+	} else {
+		// 如果在 think 块外，剩余内容算作回答内容
+		answerText += text.slice(lastIndex);
+	}
+
+	// 清理结果
+	reasoningText = reasoningText.trim();
+	answerText = answerText.trim();
+
+	// 如果只有思考内容没有回答内容，返回原文本作为回答
+	if (reasoningText && !answerText) {
+		return { answerText: text };
+	}
+
+	return {
+		reasoningText: reasoningText || undefined,
+		answerText: answerText || undefined,
+	};
 }
 
 // ============================================================================

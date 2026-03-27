@@ -52,6 +52,8 @@ export interface CompactConfig {
 	markdownRounds: number;
 	/** 最大总轮数（超过后丢弃） */
 	maxTotalRounds: number;
+	/** 是否跳过 Markdown 转换（对 MiniMax 等严格模型使用） */
+	skipMarkdown?: boolean;
 }
 
 /** 默认 Compact 配置 */
@@ -59,6 +61,7 @@ export const DEFAULT_COMPACT_CONFIG: CompactConfig = {
 	fullRounds: 10,      // 完整保留 10 轮
 	markdownRounds: 20,  // Markdown 简化 20 轮
 	maxTotalRounds: 50,  // 最多 50 轮
+	skipMarkdown: false, // 默认启用 Markdown 压缩
 };
 
 /**
@@ -268,6 +271,34 @@ export function compactMessages(
 	// 2. 如果消息数少于完整保留数，直接返回
 	if (filtered.length <= fullMessages) {
 		return filtered;
+	}
+	
+	// 【修复】如果 skipMarkdown 为 true（MiniMax 等严格模型），直接截断不转换
+	if (opts.skipMarkdown) {
+		// 只保留最近 maxTotalMessages 条消息，确保不留下孤立的 tool result
+		let truncated = safeTruncateMessages(filtered, maxTotalMessages);
+		
+		// 检查边界：如果第一条是 tool result，需要找对应的 assistant
+		if (truncated.length > 0) {
+			const firstMsg = truncated[0] as any;
+			if (firstMsg.role === "toolResult" && firstMsg.toolCallId) {
+				// 在被截断的消息中查找对应的 assistant
+				const removedCount = filtered.length - truncated.length;
+				for (let i = removedCount - 1; i >= 0; i--) {
+					const msg = filtered[i] as any;
+					if (msg.role === "assistant" && msg.toolCalls) {
+						const hasMatchingToolCall = msg.toolCalls.some((tc: any) => tc.id === firstMsg.toolCallId);
+						if (hasMatchingToolCall) {
+							// 找到了对应的 assistant，添加到开头
+							truncated = [msg, ...truncated];
+							break;
+						}
+					}
+				}
+			}
+		}
+		
+		return truncated;
 	}
 	
 	// 3. 分割消息为三层
