@@ -285,6 +285,8 @@ export class CoreAgent {
 					log.logWarning(`[Agent] Channel ${channelId} configured model "${channelConfig.model}" not found in models.json, using default model`);
 					// 清除无效的频道模型配置
 					this.config.modelManager.resetChannelModel(channelId);
+					// 销毁 Agent 状态，强制重新初始化以使用新模型
+					this.destroyChannelState(channelId);
 				}
 			}
 		} else {
@@ -350,6 +352,8 @@ export class CoreAgent {
 				} else {
 					log.logWarning(`[Agent] Channel ${chatId} configured model "${channelConfig.model}" not found in models.json, using default model`);
 					this.config.modelManager.resetChannelModel(chatId);
+					// 销毁 Agent 状态，强制重新初始化以使用新模型
+					this.destroyChannelState(chatId);
 				}
 			}
 		} else {
