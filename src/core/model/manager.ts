@@ -295,7 +295,14 @@ export class ModelManager {
 	getChannelModelId(channelId: string, adapterDefaultModel?: string): string {
 		// 1. 优先使用 channel 级别模型
 		if (this.perChannelModels.has(channelId)) {
-			return this.perChannelModels.get(channelId)!;
+			const channelModelId = this.perChannelModels.get(channelId)!;
+			// 验证模型是否仍然存在于配置中
+			if (this.getModelConfig(channelModelId)) {
+				return channelModelId;
+			}
+			// 模型已不存在，清除频道配置并使用默认模型
+			log.logWarning(`[ModelManager] Channel ${channelId} model "${channelModelId}" no longer exists, falling back to default`);
+			this.perChannelModels.delete(channelId);
 		}
 
 		// 2. 其次使用 adapter 默认模型

@@ -277,7 +277,15 @@ export class CoreAgent {
 			configManager.watchChannelConfig(channelId);
 			const channelConfig = configManager.getChannelConfig(channelId);
 			if (channelConfig.model) {
-				this.config.modelManager.switchChannelModel(channelId, channelConfig.model);
+				// 验证模型是否存在于当前配置中
+				const modelConfig = this.config.modelManager.getModelConfig(channelConfig.model);
+				if (modelConfig) {
+					this.config.modelManager.switchChannelModel(channelId, channelConfig.model);
+				} else {
+					log.logWarning(`[Agent] Channel ${channelId} configured model "${channelConfig.model}" not found in models.json, using default model`);
+					// 清除无效的频道模型配置
+					this.config.modelManager.resetChannelModel(channelId);
+				}
 			}
 		} else {
 			const modelConfigPath = join(channelDir, "channel-config.json");
@@ -334,9 +342,15 @@ export class CoreAgent {
 			configManager.watchChannelConfig(chatId);
 			const channelConfig = configManager.getChannelConfig(chatId);
 
-			// 应用模型配置
+			// 应用模型配置（验证模型是否存在）
 			if (channelConfig.model) {
-				this.config.modelManager.switchChannelModel(chatId, channelConfig.model);
+				const modelConfig = this.config.modelManager.getModelConfig(channelConfig.model);
+				if (modelConfig) {
+					this.config.modelManager.switchChannelModel(chatId, channelConfig.model);
+				} else {
+					log.logWarning(`[Agent] Channel ${chatId} configured model "${channelConfig.model}" not found in models.json, using default model`);
+					this.config.modelManager.resetChannelModel(chatId);
+				}
 			}
 		} else {
 			// 回退到旧的加载方式
